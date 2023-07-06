@@ -1,0 +1,54 @@
+[
+  {
+    "model": "scanlate.AllowedEmail",
+    "fields": {
+      "email": "amirkhdaur@gmail.com"
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
+      "name": "Равочник",
+      "slug": "raw-provider"
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
+      "name": "Куратор",
+      "slug": "curator"
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
+      "name": "Клинер",
+      "slug": "cleaner",
+      "order": 0
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
+      "name": "Переводчик",
+      "slug": "translator",
+      "order": 0
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
+      "name": "Тайпер",
+      "slug": "typesetter",
+      "order": 1
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
+      "name": "QC",
+      "slug": "quality-checker",
+      "order": 2
+    }
+  }
+]
