@@ -23,6 +23,7 @@ services:
     environment:
       DJANGO_SECRET_KEY:
       DJANGO_DEBUG:
+      DJANGO_ALLOWED_HOSTS:
       POSTGRES_NAME:
       POSTGRES_USER:
       POSTGRES_PASSWORD:
