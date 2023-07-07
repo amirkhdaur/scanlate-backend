@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
+from rest_framework.authtoken.models import Token
 
 from .models import *
 
@@ -44,12 +45,6 @@ class RoleNestedSerializer(serializers.ModelSerializer):
 # User Related Serializers
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
-    confirm_password = serializers.CharField(write_only=True)
-
-    def validate(self, data):
-        if data.get('password') != data.get('confirm_password'):
-            raise serializers.ValidationError('Passwords do not match')
-        return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -62,7 +57,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'name', 'password', 'confirm_password']
+        fields = ['username', 'email', 'name', 'password']
 
 
 class UserLoginSerializer(serializers.Serializer):
@@ -70,7 +65,7 @@ class UserLoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
-        username = attrs.get('username')
+        username = attrs.get('username').lower()
         password = attrs.get('password')
 
         user = authenticate(username=username, password=password)
@@ -106,6 +101,20 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         exclude = ['password', 'last_login', 'is_admin']
+
+
+class UserTokenSerializer(serializers.ModelSerializer):
+    roles = RoleNestedSerializer(many=True, read_only=True)
+    subroles = SubroleNestedSerializer(many=True, read_only=True)
+    token = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        exclude = ['password', 'last_login', 'is_admin']
+
+    def get_token(self, obj):
+        token, created = Token.objects.get_or_create(user=obj)
+        return token.key
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
@@ -161,45 +170,29 @@ class WorkerTemplateUpdateSerializer(serializers.ModelSerializer):
         model = WorkerTemplate
         exclude = ['title', 'role']
 
-    def update(self, instance, validated_data):
-        user = validated_data.get('user')
-        if not user.roles.filter(pk=instance.role.pk).exists():
-            raise serializers.ValidationError('User does not have this role category')
-        super().update(instance, validated_data)
 
-
-class WorkerSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    role = RoleNestedSerializer(read_only=True)
-    subrole = SubroleNestedSerializer(read_only=True)
-
+class WorkerSerializer(WorkerTemplateSerializer):
     class Meta:
         model = Worker
         exclude = ['chapter']
 
 
-class WorkerUpdateSerializer(serializers.ModelSerializer):
+class WorkerUpdateSerializer(WorkerTemplateUpdateSerializer):
     class Meta:
         model = Worker
         exclude = ['chapter', 'role', 'upload_time', 'is_done', 'url']
 
-    def update(self, instance, validated_data):
-        user = validated_data.get('user')
-        if not user.roles.filter(pk=instance.role.pk).exists():
-            raise serializers.ValidationError('User does not have this role category')
-        super().update(instance, validated_data)
-
 
 # Title Serializers
-class TitleListSerializer(serializers.ModelSerializer):
+class TitleSerializer(serializers.ModelSerializer):
+    workers = WorkerTemplateSerializer(many=True, read_only=True)
+
     class Meta:
         model = Title
         exclude = ['team']
 
 
-class TitleSerializer(serializers.ModelSerializer):
-    workers = WorkerTemplateSerializer(many=True, read_only=True)
-
+class TitleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
         exclude = ['team']
@@ -225,6 +218,13 @@ class TitleCreateSerializer(serializers.ModelSerializer):
         return title
 
 
+class TitleUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Title
+        exclude = ['team']
+
+
+# Chapter
 class ChapterSerializer(serializers.ModelSerializer):
     workers = WorkerSerializer(many=True, read_only=True)
 
@@ -245,7 +245,6 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
         fields = ['title', 'tome', 'chapter', 'pages']
 
     def create(self, validated_data):
-
         title = validated_data.get('title')
         chapter = title.create_chapter(
             tome=validated_data.get('tome'),

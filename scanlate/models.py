@@ -22,8 +22,8 @@ class User(AbstractBaseUser):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=300)
     is_admin = models.BooleanField(default=False)
-    roles = models.ManyToManyField(Role)
-    subroles = models.ManyToManyField(Subrole)
+    roles = models.ManyToManyField(Role, blank=True)
+    subroles = models.ManyToManyField(Subrole, blank=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'name']

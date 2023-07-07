@@ -118,8 +118,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 20,
+    'EXCEPTION_HANDLER': 'scanlate.exceptions.scanlate_exception_handler',
+    'DEFAULT_PAGINATION_CLASS': 'scanlate.pagination.CountPagePagination',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'scanlate.authentication.ScanlateTokenAuthentication'
     ],
