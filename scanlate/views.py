@@ -39,8 +39,8 @@ class UserRegisterAPIView(views.APIView):
 
         user = serializer.save()
 
-        token = Token.objects.create(user=user)
-        return Response({'token': token.key})
+        response_serializer = UserTokenSerializer(instance=user)
+        return Response(response_serializer.data)
 
 
 class UserLoginAPIView(views.APIView):
@@ -50,8 +50,9 @@ class UserLoginAPIView(views.APIView):
         serializer = UserLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data.get('user')
-        token = Token.objects.get(user=user)
-        return Response({'token': token.key})
+
+        response_serializer = UserTokenSerializer(instance=user)
+        return Response(response_serializer.data)
 
 
 class AllowedEmailListAPIView(views.APIView):
@@ -102,6 +103,8 @@ class TeamViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return TeamListSerializer
+        elif self.action == 'retrieve':
+            return TeamRetrieveSerializer
         else:
             return TeamSerializer
 
@@ -177,6 +180,8 @@ class TitleViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return TitleListSerializer
+        elif self.action == 'retrieve':
+            return TitleRetrieveSerializer
         else:
             return TitleSerializer
 
@@ -208,6 +213,8 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
 
 
 class ChapterViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAdmin]
+
     def get_queryset(self):
         if self.action == 'list':
             team_id = self.request.query_params.get('title_id')
@@ -218,14 +225,11 @@ class ChapterViewSet(viewsets.ModelViewSet):
             return title.chapters.all()
         return Chapter.objects.all()
 
-    def get_permissions(self):
-        if self.action == 'create':
-            return [permission() for permission in [IsAdmin | IsCurator | IsRawProvider]]
-        return [permission() for permission in [IsAdmin | IsCurator]]
-
     def get_serializer_class(self):
         if self.action == 'list' or self.action == 'update':
             return ChapterListSerializer
+        elif self.action == 'retrieve':
+            return ChapterRetrieveSerializer
         return ChapterSerializer
 
     def create(self, request, *args, **kwargs):
@@ -302,5 +306,7 @@ class UserViewSet(mixins.ListModelMixin,
     def get_serializer_class(self):
         if self.action == 'update':
             return UserUpdateSerializer
+        elif self.action == 'retrieve':
+            return UserRetrieveSerializer
         else:
             return UserSerializer

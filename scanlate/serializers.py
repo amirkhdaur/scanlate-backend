@@ -1,7 +1,20 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
+from rest_framework.authtoken.models import Token
 
 from .models import *
+
+
+class ScanlateSerializerMixin:
+    @property
+    def data(self):
+        data = super().data
+        new_data = {
+            'errors': '',
+            'content': data,
+            'props': {}
+        }
+        return new_data
 
 
 class UrlSerializer(serializers.Serializer):
@@ -44,12 +57,6 @@ class RoleNestedSerializer(serializers.ModelSerializer):
 # User Related Serializers
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
-    confirm_password = serializers.CharField(write_only=True)
-
-    def validate(self, data):
-        if data.get('password') != data.get('confirm_password'):
-            raise serializers.ValidationError('Passwords do not match')
-        return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -62,7 +69,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'name', 'password', 'confirm_password']
+        fields = ['username', 'email', 'name', 'password']
 
 
 class UserLoginSerializer(serializers.Serializer):
@@ -70,7 +77,7 @@ class UserLoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
-        username = attrs.get('username')
+        username = attrs.get('username').lower()
         password = attrs.get('password')
 
         user = authenticate(username=username, password=password)
@@ -108,6 +115,29 @@ class UserSerializer(serializers.ModelSerializer):
         exclude = ['password', 'last_login', 'is_admin']
 
 
+class UserTokenSerializer(ScanlateSerializerMixin, serializers.ModelSerializer):
+    roles = RoleNestedSerializer(many=True, read_only=True)
+    subroles = SubroleNestedSerializer(many=True, read_only=True)
+    token = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        exclude = ['password', 'last_login', 'is_admin']
+
+    def get_token(self, obj):
+        token, created = Token.objects.get_or_create(user=obj)
+        return token.key
+
+
+class UserRetrieveSerializer(ScanlateSerializerMixin, serializers.ModelSerializer):
+    roles = RoleNestedSerializer(many=True, read_only=True)
+    subroles = SubroleNestedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = User
+        exclude = ['password', 'last_login', 'is_admin']
+
+
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -120,6 +150,14 @@ class EmailSerializer(serializers.Serializer):
 
 # Team Serializers
 class TeamSerializer(serializers.ModelSerializer):
+    members = UserSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Team
+        fields = '__all__'
+
+
+class TeamRetrieveSerializer(ScanlateSerializerMixin, serializers.ModelSerializer):
     members = UserSerializer(many=True, read_only=True)
 
     class Meta:
@@ -191,13 +229,21 @@ class WorkerUpdateSerializer(serializers.ModelSerializer):
 
 
 # Title Serializers
+class TitleSerializer(serializers.ModelSerializer):
+    workers = WorkerTemplateSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Title
+        exclude = ['team']
+
+
 class TitleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
         exclude = ['team']
 
 
-class TitleSerializer(serializers.ModelSerializer):
+class TitleRetrieveSerializer(ScanlateSerializerMixin, serializers.ModelSerializer):
     workers = WorkerTemplateSerializer(many=True, read_only=True)
 
     class Meta:
@@ -225,7 +271,16 @@ class TitleCreateSerializer(serializers.ModelSerializer):
         return title
 
 
+# Chapter
 class ChapterSerializer(serializers.ModelSerializer):
+    workers = WorkerSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Chapter
+        fields = '__all__'
+
+
+class ChapterRetrieveSerializer(ScanlateSerializerMixin, serializers.ModelSerializer):
     workers = WorkerSerializer(many=True, read_only=True)
 
     class Meta:
