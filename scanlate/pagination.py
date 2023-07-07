@@ -4,6 +4,8 @@ from collections import OrderedDict
 from rest_framework.pagination import BasePagination, _positive_int
 from rest_framework.response import Response
 
+from .response import ScanlateResponse
+
 
 class CountPagePagination(BasePagination):
     count_query_param = 'count'
@@ -22,14 +24,10 @@ class CountPagePagination(BasePagination):
         return list(queryset[(self.page - 1) * self.count:self.page * self.count])
 
     def get_paginated_response(self, data):
-        return Response(OrderedDict([
-            ('errors', {}),
-            ('content', data),
-            ('props', OrderedDict([
-                ('total_items', self.total_items),
-                ('total_pages', self.total_pages),
-                ('page', self.page),
-            ])),
+        return ScanlateResponse(content=data, props=OrderedDict([
+            ('total_items', self.total_items),
+            ('total_pages', self.total_pages),
+            ('page', self.page),
         ]))
 
     def get_paginated_response_schema(self, schema):
@@ -38,6 +36,10 @@ class CountPagePagination(BasePagination):
             'properties': {
                 'errors': {
                     'type': 'object',
+                },
+                'msg': {
+                    'type': 'string',
+                    'example': 'msg',
                 },
                 'content': schema,
                 'props': {

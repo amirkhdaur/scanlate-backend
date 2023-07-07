@@ -7,6 +7,8 @@ from rest_framework.permissions import AllowAny
 from .serializers import *
 from .models import *
 from .permissions import IsAdmin, IsRawProvider, IsCurator, IsQualityChecker
+from .response import ScanlateResponse
+from .pagination import CountPagePagination
 
 
 class RoleViewSet(mixins.ListModelMixin,
@@ -40,7 +42,7 @@ class UserRegisterAPIView(views.APIView):
         user = serializer.save()
 
         response_serializer = UserTokenSerializer(instance=user)
-        return Response(response_serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
 
 class UserLoginAPIView(views.APIView):
@@ -52,15 +54,18 @@ class UserLoginAPIView(views.APIView):
         user = serializer.validated_data.get('user')
 
         response_serializer = UserTokenSerializer(instance=user)
-        return Response(response_serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
 
 class AllowedEmailListAPIView(views.APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request, *args, **kwargs):
-        serializer = EmailSerializer(instance=AllowedEmail.objects.all(), many=True)
-        return Response(serializer.data)
+        paginator = CountPagePagination()
+        result_page = paginator.paginate_queryset(AllowedEmail.objects.all(), request)
+
+        serializer = EmailSerializer(instance=result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class AllowEmailAPIView(views.APIView):
@@ -72,11 +77,11 @@ class AllowEmailAPIView(views.APIView):
         email = serializer.validated_data.get('email')
 
         if AllowedEmail.objects.filter(email=email).exists():
-            return Response({'detail': 'Email is already allowed'}, status=status.HTTP_409_CONFLICT)
+            return ScanlateResponse(msg='Email is already allowed', status=status.HTTP_409_CONFLICT)
 
         AllowedEmail.objects.create(email=email)
 
-        return Response({'detail': 'Email successfully allowed'})
+        return ScanlateResponse(msg='Email successfully allowed')
 
 
 class DisallowEmailAPIView(views.APIView):
@@ -88,11 +93,11 @@ class DisallowEmailAPIView(views.APIView):
         email = serializer.validated_data.get('email')
 
         if not AllowedEmail.objects.filter(email=email).exists():
-            return Response({'detail': 'Email is already disallowed'}, status=status.HTTP_409_CONFLICT)
+            return ScanlateResponse(msg='Email is already disallowed', status=status.HTTP_409_CONFLICT)
 
         AllowedEmail.objects.get(email=email).delete()
 
-        return Response({'detail': 'Email successfully disallowed'})
+        return ScanlateResponse(msg='Email successfully disallowed')
 
 
 class TeamViewSet(viewsets.ModelViewSet):
@@ -103,10 +108,13 @@ class TeamViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return TeamListSerializer
-        elif self.action == 'retrieve':
-            return TeamRetrieveSerializer
         else:
             return TeamSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return ScanlateResponse(content=serializer.data)
 
     def create(self, request, *args, **kwargs):
         serializer = TeamCreateSerializer(data=request.data)
@@ -122,7 +130,7 @@ class TeamViewSet(viewsets.ModelViewSet):
         serializer.save()
 
         response_serializer = self.get_serializer(instance=instance)
-        return Response(response_serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
         raise exceptions.MethodNotAllowed(request.method)
@@ -140,10 +148,10 @@ class TeamAddMemberAPIView(generics.GenericAPIView):
         user = serializer.validated_data.get('user')
 
         if user.teams.filter(pk=team.pk).exists():
-            return Response({'detail': 'User is already in team'}, status.HTTP_409_CONFLICT)
+            return ScanlateResponse(msg='User is already in team', status=status.HTTP_409_CONFLICT)
 
         team.members.add(user)
-        return Response({'detail': 'Successfully added'})
+        return ScanlateResponse(msg='Successfully added')
 
 
 class TeamRemoveMemberAPIView(generics.GenericAPIView):
@@ -158,10 +166,10 @@ class TeamRemoveMemberAPIView(generics.GenericAPIView):
         user = serializer.validated_data.get('user')
 
         if not user.teams.filter(pk=team.pk).exists():
-            return Response({'detail': 'User is not in team'}, status.HTTP_409_CONFLICT)
+            return ScanlateResponse(msg='User is not in team', status=status.HTTP_409_CONFLICT)
 
         team.members.remove(user)
-        return Response({'detail': 'Successfully removed'})
+        return ScanlateResponse(msg='Successfully removed')
 
 
 class TitleViewSet(viewsets.ModelViewSet):
@@ -178,12 +186,15 @@ class TitleViewSet(viewsets.ModelViewSet):
         return Title.objects.all()
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == 'list' or self.action == 'update':
             return TitleListSerializer
-        elif self.action == 'retrieve':
-            return TitleRetrieveSerializer
         else:
             return TitleSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return ScanlateResponse(content=serializer.data)
 
     def create(self, request, *args, **kwargs):
         serializer = TitleCreateSerializer(data=request.data)
@@ -191,9 +202,17 @@ class TitleViewSet(viewsets.ModelViewSet):
         title = serializer.save()
 
         response_serializer = self.get_serializer(instance=title)
-
         headers = self.get_success_headers(serializer.data)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return ScanlateResponse(content=response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = TitleUpdateSerializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        response_serializer = self.get_serializer(instance)
+        return ScanlateResponse(content=serializer.data)
 
 
 class WorkerTemplateViewSet(mixins.UpdateModelMixin,
@@ -206,10 +225,14 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
         instance = self.get_object()
         serializer = WorkerTemplateUpdateSerializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
 
+        user = serializer.validated_data.get('user')
+        if user and not user.roles.filter(pk=instance.role.pk).exists():
+            return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
+
+        instance = serializer.save()
         response_serializer = self.get_serializer(instance=instance)
-        return Response(response_serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
 
 class ChapterViewSet(viewsets.ModelViewSet):
@@ -228,9 +251,12 @@ class ChapterViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list' or self.action == 'update':
             return ChapterListSerializer
-        elif self.action == 'retrieve':
-            return ChapterRetrieveSerializer
         return ChapterSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return ScanlateResponse(content=serializer.data)
 
     def create(self, request, *args, **kwargs):
         data = request.data
@@ -246,7 +272,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         response_serializer = self.get_serializer(instance=chapter)
 
         headers = self.get_success_headers(serializer.data)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return ScanlateResponse(content=response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -255,7 +281,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         serializer.save()
 
         response_serializer = self.get_serializer(instance=instance)
-        return Response(response_serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
 
 class WorkerViewSet(mixins.ListModelMixin,
@@ -275,14 +301,23 @@ class WorkerViewSet(mixins.ListModelMixin,
         else:
             return Worker.objects.all()
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return ScanlateResponse(content=serializer.data)
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = WorkerUpdateSerializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
 
+        user = serializer.validated_data.get('user')
+        if user and not user.roles.filter(pk=instance.role.pk).exists():
+            return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
+
+        instance = serializer.save()
         response_serializer = self.get_serializer(instance=instance)
-        return Response(response_serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
     @action(detail=True, methods=['post'])
     def upload(self, request, *args, **kwargs):
@@ -291,7 +326,7 @@ class WorkerViewSet(mixins.ListModelMixin,
         serializer.is_valid(raise_exception=True)
 
         worker.upload(serializer.validated_data.get('url'))
-        return Response({'detail': 'Successfully uploaded'})
+        return ScanlateResponse(msg='Successfully uploaded')
 
 
 # Users
@@ -302,11 +337,18 @@ class UserViewSet(mixins.ListModelMixin,
                   viewsets.GenericViewSet):
     queryset = User.objects.all()
     permission_classes = [IsAdmin]
+    serializer_class = UserSerializer
 
-    def get_serializer_class(self):
-        if self.action == 'update':
-            return UserUpdateSerializer
-        elif self.action == 'retrieve':
-            return UserRetrieveSerializer
-        else:
-            return UserSerializer
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return ScanlateResponse(content=serializer.data)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = UserUpdateSerializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        response_serializer = self.get_serializer(user)
+        return ScanlateResponse(content=response_serializer.data)
