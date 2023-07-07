@@ -7,7 +7,7 @@ def scanlate_exception_handler(exc, context):
 
     if response:
         errors = {}
-        msg = response.data.pop('detail')
+        msg = response.data.pop('detail', '')
         for key in response.data.copy():
             errors[key] = response.data.pop(key)
 

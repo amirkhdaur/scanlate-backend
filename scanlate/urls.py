@@ -1,9 +1,9 @@
 from django.urls import path, include, re_path
-from rest_framework import routers
 
 from . import views
+from .routers import ScanlateRouter
 
-router = routers.SimpleRouter(trailing_slash=False)
+router = ScanlateRouter()
 router.register(r'teams', views.TeamViewSet)
 router.register(r'roles/subroles', views.SubroleViewSet)
 router.register(r'roles', views.RoleViewSet)
