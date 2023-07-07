@@ -26,8 +26,33 @@ class SubroleViewSet(mixins.CreateModelMixin,
     serializer_class = SubroleSerializer
     permission_classes = [IsAdmin]
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = serializer.validated_data.get('role')
+
+        if role.subroles.filter(name=serializer.validated_data.get('name')).exists():
+            return ScanlateResponse(msg='This subrole is already exists', status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+
+        headers = self.get_success_headers(serializer.data)
+        return ScanlateResponse(content=serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = SubroleUpdateSerializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if instance.role.subroles.filter(name=serializer.validated_data.get('name')).exists():
+            return ScanlateResponse(msg='This subrole is already exists', status=status.HTTP_400_BAD_REQUEST)
+        instance = serializer.save()
+
+        response_serializer = self.get_serializer(instance=instance)
+        return ScanlateResponse(content=response_serializer.data)
+
 
 class UserRegisterAPIView(views.APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
@@ -37,7 +62,7 @@ class UserRegisterAPIView(views.APIView):
         email = serializer.validated_data.get('email')
 
         if not AllowedEmail.objects.filter(email=email).exists():
-            return Response({'detail': 'Email is not allowed'}, status=status.HTTP_403_FORBIDDEN)
+            return ScanlateResponse(msg='Email is not allowed', status=status.HTTP_403_FORBIDDEN)
 
         user = serializer.save()
 
@@ -46,12 +71,19 @@ class UserRegisterAPIView(views.APIView):
 
 
 class UserLoginAPIView(views.APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
         serializer = UserLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data.get('user')
+
+        login = serializer.validated_data.get('login').lower()
+        password = serializer.validated_data.get('password')
+
+        user = authenticate(username=login, password=password)
+        if not user:
+            return ScanlateResponse(msg='Invalid username or password', status=status.HTTP_400_BAD_REQUEST)
 
         response_serializer = UserTokenSerializer(instance=user)
         return ScanlateResponse(content=response_serializer.data)

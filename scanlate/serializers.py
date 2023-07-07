@@ -22,6 +22,12 @@ class SubroleSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class SubroleUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subrole
+        exclude = ['role']
+
+
 class SubroleNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subrole
@@ -61,19 +67,8 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
 
 class UserLoginSerializer(serializers.Serializer):
-    username = serializers.CharField(required=True)
+    login = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, required=True)
-
-    def validate(self, attrs):
-        username = attrs.get('username').lower()
-        password = attrs.get('password')
-
-        user = authenticate(username=username, password=password)
-        if not user:
-            raise serializers.ValidationError('Invalid username or password')
-
-        attrs['user'] = user
-        return attrs
 
 
 class UsernameSerializer(serializers.Serializer):
