@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     
     'rest_framework',
     'rest_framework.authtoken',
+    'corsheaders',
     
     'scanlate',
 ]
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -117,6 +119,7 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+# Rest Framwork
 REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'scanlate.exceptions.scanlate_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'scanlate.pagination.CountPagePagination',
@@ -127,3 +130,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated'
     ]
 }
+
+
+# CORS
+CORS_ALLOW_ALL_ORIGINS = True
