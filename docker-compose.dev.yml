@@ -34,17 +34,52 @@ services:
         python manage.py makemigrations scanlate &&
         python manage.py migrate &&
         python manage.py runserver 0.0.0.0:8000"
+    healthcheck:
+      test: curl --fail http://0.0.0.0:8000/ || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    ports:
-      - 8000:8000
     networks:
       - main
 
+  nginx:
+    build: nginx/
+    environment:
+      SERVER_HOST: backend
+      SERVER_PORT: 8000
+      NGINX_HOST:
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    restart: unless-stopped
+    networks:
+      - main
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    command: certonly --webroot -w /var/www/certbot --force-renewal --email amirkhdaur@gmail.com -d mcserver.tw1.ru --agree-tos
+    depends_on:
+      nginx:
+        condition: service_started
+
 volumes:
   pgdata:
+  certbot-conf:
+  certbot-www:
 
 networks:
   main:
