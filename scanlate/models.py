@@ -24,6 +24,8 @@ class User(AbstractBaseUser):
     is_admin = models.BooleanField(default=False)
     roles = models.ManyToManyField(Role, blank=True)
     subroles = models.ManyToManyField(Subrole, blank=True)
+    balance = models.IntegerField(default=0)
+    discord_user_id = models.PositiveBigIntegerField()
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'name']
@@ -50,20 +52,22 @@ class Team(models.Model):
         WorkerTemplate.objects.bulk_create(to_create)
         return title
 
-    def pay(self, user, amount):
-        Payment.objects.create(
+    def create_payment(self, user, amount, payment_type, worker=None):
+        if payment_type == 'in':
+            user.balance += amount
+        elif payment_type == 'out':
+            user.balance -= amount
+        else:
+            raise ValueError('payment_type must be "in" or "out"')
+
+        return Payment.objects.create(
             team=self,
             user=user,
             amount=amount,
-            time=timezone.localtime()
+            datetime=timezone.localtime(),
+            type=payment_type,
+            worker=worker
         )
-
-
-class Payment(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
-    amount = models.IntegerField()
-    time = models.DateField()
 
 
 class Title(models.Model):
@@ -181,3 +185,12 @@ class Worker(models.Model):
             self.chapter.end()
         elif not self.chapter.workers.filter(role__order=self.role.order, is_done=False).exists():
             self.chapter.calculate_deadlines(self.role.order + 1)
+
+
+class Payment(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    amount = models.IntegerField()
+    datetime = models.DateTimeField()
+    type = models.CharField(max_length=3)
+    worker = models.ForeignKey(Worker, null=True, default=None, on_delete=models.SET_NULL)

@@ -104,8 +104,10 @@ class AllowedEmailListAPIView(views.APIView):
         paginator = CountPagePagination()
         result_page = paginator.paginate_queryset(AllowedEmail.objects.all(), request)
 
-        serializer = EmailSerializer(instance=result_page, many=True)
-        return paginator.get_paginated_response(serializer.data)
+        emails = []
+        for result in result_page:
+            emails.append(result.email)
+        return paginator.get_paginated_response(emails)
 
 
 class AllowEmailAPIView(views.APIView):
@@ -392,3 +394,8 @@ class UserViewSet(mixins.ListModelMixin,
 
         response_serializer = self.get_serializer(user)
         return ScanlateResponse(content=response_serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def current(self, request):
+        serializer = UserSerializer(instance=request.user)
+        return ScanlateResponse(content=serializer.data)
