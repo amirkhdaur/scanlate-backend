@@ -24,7 +24,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Prefix /;
-        proxy_pass http://server/api/;
+        proxy_pass http://server/api;
     }
 
     location ~ /.well-known/acme-challenge/ {
