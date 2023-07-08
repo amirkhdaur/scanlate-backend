@@ -80,7 +80,6 @@ class UsernameSerializer(serializers.Serializer):
 
         try:
             user = User.objects.get(username=username)
-            user = User.objects.get(email=username)
         except User.DoesNotExist:
             if user is None:
                 raise serializers.ValidationError('No user with this username')
@@ -115,7 +114,7 @@ class UserTokenSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['name', 'roles', 'subroles']
+        fields = ['name', 'roles', 'subroles', 'discord_user_id']
 
 
 class EmailSerializer(serializers.Serializer):
