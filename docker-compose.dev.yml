@@ -35,8 +35,8 @@ services:
         python manage.py migrate &&
         python manage.py runserver 0.0.0.0:8000"
     healthcheck:
-      test: curl --fail http://0.0.0.0:8000/healthcheck/ || exit 1
-      interval: 5s
+      test: curl --fail http://0.0.0.0:8000/api/healthcheck/ || exit 1
+      interval: 1m
       timeout: 5s
       retries: 3
       start_period: 10s
