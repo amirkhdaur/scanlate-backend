@@ -14,6 +14,8 @@ router.register(r'titles', views.TitleViewSet, basename='title')
 router.register(r'users', views.UserViewSet)
 
 urlpatterns = [
+    re_path('healthcheck/?$', views.HealthCheckAPIView.as_view()),
+
     # Auth
     re_path('auth/register/?$', views.UserRegisterAPIView.as_view()),
     re_path('auth/login/?$', views.UserLoginAPIView.as_view()),

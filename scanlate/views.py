@@ -11,6 +11,14 @@ from .response import ScanlateResponse
 from .pagination import CountPagePagination
 
 
+class HealthCheckAPIView(views.APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response()
+
+
 class RoleViewSet(mixins.ListModelMixin,
                   viewsets.GenericViewSet):
     queryset = Role.objects.all()
