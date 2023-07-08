@@ -15,12 +15,6 @@ class SubroleSerializer(serializers.ModelSerializer):
         model = Subrole
         fields = '__all__'
 
-    def validate(self, attrs):
-        role = attrs.get('role')
-        if role.subroles.filter(name=attrs.get('name')).exists():
-            raise serializers.ValidationError('This subrole is already exists')
-        return attrs
-
 
 class SubroleUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -52,6 +46,10 @@ class RoleNestedSerializer(serializers.ModelSerializer):
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'name', 'password', 'discord_user_id']
+
     def create(self, validated_data):
         user = User.objects.create_user(
             username=validated_data.get('username'),
@@ -62,31 +60,16 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         )
         return user
 
-    class Meta:
-        model = User
-        fields = ['username', 'email', 'name', 'password', 'discord_user_id']
+
+class UserRegisterResponseSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    password = serializers.CharField()
 
 
 class UserLoginSerializer(serializers.Serializer):
     login = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, required=True)
-
-
-class UsernameSerializer(serializers.Serializer):
-    username = serializers.CharField(required=True)
-
-    def validate(self, attrs):
-        username = attrs.get('username')
-        user = None
-
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
-            if user is None:
-                raise serializers.ValidationError('No user with this username')
-
-        attrs['user'] = user
-        return attrs
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -116,37 +99,6 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['name', 'roles', 'subroles', 'discord_user_id']
-
-
-class EmailSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
-
-
-# Team Serializers
-class TeamSerializer(serializers.ModelSerializer):
-    members = UserSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Team
-        fields = '__all__'
-
-
-class TeamListSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Team
-        exclude = ['members']
-
-
-class TeamCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Team
-        fields = ['name', 'slug']
-
-
-class TeamUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Team
-        fields = ['name', 'slug']
 
 
 # Workers Serializers
@@ -184,39 +136,31 @@ class TitleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Title
-        exclude = ['team']
+        fields = '__all__'
 
 
 class TitleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        exclude = ['team']
+        fields = '__all__'
 
 
 class TitleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        fields = ['name', 'slug', 'team']
-
-    def validate(self, attrs):
-        team = attrs.get('team')
-        if team.titles.filter(slug=attrs.get('slug')).exists():
-            raise serializers.ValidationError('Title with this slug is already in team')
-        return attrs
+        fields = ['name', 'slug']
 
     def create(self, validated_data):
-        team = validated_data.get('team')
-        title = team.create_title(
+        return Title.objects.create(
             name=validated_data.get('name'),
             slug=validated_data.get('slug')
         )
-        return title
 
 
 class TitleUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        exclude = ['team']
+        fields = '__all__'
 
 
 # Chapter
@@ -237,20 +181,21 @@ class ChapterListSerializer(serializers.ModelSerializer):
 class ChapterCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chapter
-        fields = ['title', 'tome', 'chapter', 'pages']
+        fields = ['title', 'tome', 'chapter', 'pages', 'start_date']
+        extra_kwargs = {'start_date': {'required': False}}
 
     def create(self, validated_data):
-        title = validated_data.get('title')
-        chapter = title.create_chapter(
+        return Chapter.objects.create(
+            title=validated_data.get('title'),
             tome=validated_data.get('tome'),
             chapter=validated_data.get('chapter'),
             pages=validated_data.get('pages'),
-            url=self.context.get('url')
+            url=self.context.get('url'),
+            start_date=validated_data.get('start_date')
         )
-        return chapter
 
 
 class ChapterUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chapter
-        exclude = ['title', 'start_date', 'end_date']
+        fields = ['tome', 'chapter', 'pages']

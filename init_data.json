@@ -1,11 +1,5 @@
 [
   {
-    "model": "scanlate.AllowedEmail",
-    "fields": {
-      "email": "amirkhdaur@gmail.com"
-    }
-  },
-  {
     "model": "scanlate.Role",
     "fields": {
       "name": "Равочник",

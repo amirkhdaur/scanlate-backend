@@ -6,6 +6,73 @@ from django.utils import timezone
 from .managers import UserManager
 
 
+class TitleManager(models.Manager):
+    def create(self, name, slug):
+        title = super().create(name=name, slug=slug)
+        to_create = [
+            WorkerTemplate(title=title, role=role)
+            for role in Role.objects.all()
+        ]
+        WorkerTemplate.objects.bulk_create(to_create)
+        return title
+
+
+class ChapterManager(models.Manager):
+    def create(self, title, tome, chapter, pages, url, start_date=None):
+        if start_date is None:
+            start_date = timezone.localdate() + timezone.timedelta(days=1)
+
+        chapter = super().create(
+            title=title,
+            tome=tome,
+            chapter=chapter,
+            pages=pages,
+            start_date=start_date
+        )
+
+        to_create = [
+            Worker(
+                chapter=chapter,
+                user=worker.user,
+                role=worker.role,
+                subrole=worker.subrole,
+                rate=worker.rate,
+                is_paid_by_pages=worker.is_paid_by_pages,
+                days_for_work=worker.days_for_work
+            )
+            for worker in title.workers.all()
+        ]
+        Worker.objects.bulk_create(to_create)
+
+        raw_provider = chapter.workers.get(role__slug='raw-provider')
+        raw_provider.url = url
+        raw_provider.is_done = True
+        raw_provider.save()
+
+        chapter.calculate_deadlines(order=0)
+        return chapter
+
+
+class PaymentManager(models.Manager):
+    def create(self, user, amount, payment_type, worker=None):
+        if payment_type == 'in':
+            user.balance += amount
+            user.save()
+        elif payment_type == 'out':
+            user.balance -= amount
+            user.save()
+        else:
+            raise ValueError('payment_type must be "in" or "out"')
+
+        return super().create(
+            user=user,
+            amount=amount,
+            datetime=timezone.localtime(),
+            type=payment_type,
+            worker=worker
+        )
+
+
 class Role(models.Model):
     name = models.CharField(max_length=150)
     slug = models.SlugField(unique=True)
@@ -33,86 +100,14 @@ class User(AbstractBaseUser):
     objects = UserManager()
 
 
-class AllowedEmail(models.Model):
-    email = models.EmailField(unique=True)
-    
-
-class Team(models.Model):
-    name = models.CharField(max_length=150)
-    slug = models.SlugField(unique=True)
-    members = models.ManyToManyField(User, related_name='teams')
-
-    def create_title(self, name, slug):
-        title = Title.objects.create(name=name, slug=slug, team=self)
-
-        to_create = [
-            WorkerTemplate(title=title, role=role)
-            for role in Role.objects.all()
-        ]
-        WorkerTemplate.objects.bulk_create(to_create)
-        return title
-
-    def create_payment(self, user, amount, payment_type, worker=None):
-        if payment_type == 'in':
-            user.balance += amount
-        elif payment_type == 'out':
-            user.balance -= amount
-        else:
-            raise ValueError('payment_type must be "in" or "out"')
-
-        return Payment.objects.create(
-            team=self,
-            user=user,
-            amount=amount,
-            datetime=timezone.localtime(),
-            type=payment_type,
-            worker=worker
-        )
-
-
 class Title(models.Model):
-    team = models.ForeignKey(Team, related_name='titles', on_delete=models.CASCADE)
-
     name = models.CharField(max_length=300)
-    slug = models.SlugField()
+    slug = models.SlugField(unique=True)
 
     is_active = models.BooleanField(default=True)
     ad_date = models.DateField(null=True, default=None)
 
-    def create_chapter(self, tome, chapter, pages, url, start_date=None):
-        if start_date is None:
-            start_date = timezone.localdate() + timezone.timedelta(days=1)
-
-        chapter = Chapter.objects.create(
-            title=self,
-            tome=tome,
-            chapter=chapter,
-            pages=pages,
-            start_date=start_date
-        )
-
-        to_create = [
-            Worker(
-                chapter=chapter,
-                user=worker.user,
-                role=worker.role,
-                subrole=worker.subrole,
-                rate=worker.rate,
-                is_paid_by_pages=worker.is_paid_by_pages,
-                days_for_work=worker.days_for_work
-            )
-            for worker in self.workers.all()
-        ]
-        Worker.objects.bulk_create(to_create)
-
-        raw_provider = chapter.workers.get(role__slug='raw-provider')
-        raw_provider.url = url
-        raw_provider.is_done = True
-        raw_provider.save()
-
-        chapter.calculate_deadlines(order=0)
-
-        return chapter
+    objects = TitleManager()
 
 
 class Chapter(models.Model):
@@ -124,6 +119,8 @@ class Chapter(models.Model):
 
     start_date = models.DateField()
     end_date = models.DateField(null=True)
+
+    objects = ChapterManager()
 
     def calculate_deadlines(self, order: int):
         if order == 0:
@@ -143,6 +140,11 @@ class Chapter(models.Model):
         curator = self.workers.get(role__slug='curator')
         curator.is_done = True
         curator.save()
+
+        team = self.title.team
+        for worker in self.workers.all():
+            team.create_payment(user=worker.user, amount=worker
+                                )
 
 
 class WorkerTemplate(models.Model):
@@ -189,8 +191,9 @@ class Worker(models.Model):
 
 class Payment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
     amount = models.IntegerField()
     datetime = models.DateTimeField()
     type = models.CharField(max_length=3)
     worker = models.ForeignKey(Worker, null=True, default=None, on_delete=models.SET_NULL)
+
+    objects = PaymentManager()
