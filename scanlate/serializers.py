@@ -57,13 +57,14 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             username=validated_data.get('username'),
             email=validated_data.get('email'),
             name=validated_data.get('name'),
-            password=validated_data.get('password')
+            password=validated_data.get('password'),
+            discord_user_id=validated_data.get('discord_user_id'),
         )
         return user
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'name', 'password']
+        fields = ['username', 'email', 'name', 'password', 'discord_user_id']
 
 
 class UserLoginSerializer(serializers.Serializer):
