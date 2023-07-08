@@ -3,3 +3,4 @@
 venv/
 docker-compose.dev.yml
 docker-compose.yml
+nginx/
