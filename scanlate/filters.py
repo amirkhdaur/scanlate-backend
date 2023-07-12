@@ -31,27 +31,3 @@ class ChapterFilterBackend(BaseFilterBackend):
 
             return queryset
         return queryset
-
-
-class WorkerFilterBackend(BaseFilterBackend):
-    def filter_queryset(self, request, queryset, view):
-        if view.action == 'list':
-            user_id = request.query_params.get('user_id')
-            if user_id:
-                queryset = queryset.filter(user_id=user_id).exclude(deadline=None)
-
-                is_done = query_param_to_bool(request.query_params.get('is_done'))
-                is_overdue = query_param_to_bool(request.query_params.get('is_overdue'))
-
-                if is_done is not None:
-                    queryset = queryset.filter(is_done=is_done)
-                elif is_overdue is not None:
-                    queryset = queryset.filter(deadline__lt=timezone.localdate())
-                else:
-                    queryset = queryset.filter(is_done=False)
-
-                return queryset
-            else:
-                return []
-        else:
-            return queryset
