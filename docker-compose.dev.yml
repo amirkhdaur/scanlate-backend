@@ -2,12 +2,12 @@ services:
   postgres:
     image: postgres
     environment:
-      POSTGRES_DB:
-      POSTGRES_USER:
-      POSTGRES_PASSWORD:
+      POSTGRES_DB: ${POSTGRES_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: '/var/lib/postgresql/data/pgdata'
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U {USER} -d {DB}" ]
+      test: pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_NAME}
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,14 +21,14 @@ services:
   backend:
     build: .
     environment:
-      DJANGO_SECRET_KEY:
-      DJANGO_DEBUG:
-      DJANGO_ALLOWED_HOSTS:
-      POSTGRES_NAME:
-      POSTGRES_USER:
-      POSTGRES_PASSWORD:
-      POSTGRES_HOST:
-      POSTGRES_PORT:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      POSTGRES_NAME: ${POSTGRES_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
     command: >
       sh -c "
         python manage.py makemigrations scanlate &&
@@ -52,7 +52,7 @@ services:
     environment:
       SERVER_HOST: backend
       SERVER_PORT: 8000
-      NGINX_HOST:
+      NGINX_HOST: ${DOMAIN}
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
@@ -71,7 +71,7 @@ services:
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
-    command: certonly --webroot -w /var/www/certbot --force-renewal --email amirkhdaur@gmail.com -d mcserver.tw1.ru --agree-tos
+    command: certonly --webroot -w /var/www/certbot --force-renewal --email amirkhdaur@gmail.com -d ${DOMAIN} --agree-tos
     depends_on:
       nginx:
         condition: service_started

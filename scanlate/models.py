@@ -18,7 +18,7 @@ class TitleManager(models.Manager):
 
 
 class ChapterManager(models.Manager):
-    def create(self, title, tome, chapter, pages, url, start_date=None):
+    def create(self, title, tome, chapter, pages, start_date=None):
         if start_date is None:
             start_date = timezone.localdate() + timezone.timedelta(days=1)
 
@@ -43,11 +43,6 @@ class ChapterManager(models.Manager):
             for worker in title.workers.all()
         ]
         Worker.objects.bulk_create(to_create)
-
-        raw_provider = chapter.workers.get(role__slug='raw-provider')
-        raw_provider.url = url
-        raw_provider.is_done = True
-        raw_provider.save()
 
         chapter.calculate_deadlines(order=0)
         return chapter
@@ -120,7 +115,26 @@ class Chapter(models.Model):
     start_date = models.DateField()
     end_date = models.DateField(null=True)
 
+    is_published = models.BooleanField(default=False)
+
     objects = ChapterManager()
+
+    def set_published_status(self):
+        if not self.is_published and not self.workers.filter(is_done=False).exists():
+            self.is_published = True
+            self.save()
+
+            for worker in self.workers.all():
+                if worker.is_paid_by_pages:
+                    amount = worker.rate * self.pages
+                else:
+                    amount = worker.rate
+                Payment.objects.create(
+                    user=worker.user,
+                    amount=amount,
+                    payment_type='in',
+                    worker=worker
+                )
 
     def calculate_deadlines(self, order: int):
         if order == 0:
@@ -140,11 +154,6 @@ class Chapter(models.Model):
         curator = self.workers.get(role__slug='curator')
         curator.is_done = True
         curator.save()
-
-        team = self.title.team
-        for worker in self.workers.all():
-            team.create_payment(user=worker.user, amount=worker
-                                )
 
 
 class WorkerTemplate(models.Model):
@@ -183,7 +192,7 @@ class Worker(models.Model):
         self.is_done = True
         self.save()
 
-        if self.role.slug == 'quality-checker':
+        if self.role.order == Role.objects.exclude(order=None).order_by('-order').first().order:
             self.chapter.end()
         elif not self.chapter.workers.filter(role__order=self.role.order, is_done=False).exists():
             self.chapter.calculate_deadlines(self.role.order + 1)

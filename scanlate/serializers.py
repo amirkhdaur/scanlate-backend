@@ -9,7 +9,7 @@ class UrlSerializer(serializers.Serializer):
     url = serializers.URLField(required=True)
 
 
-# Role & Category Serializers
+# Subrole
 class SubroleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subrole
@@ -28,6 +28,7 @@ class SubroleNestedSerializer(serializers.ModelSerializer):
         exclude = ['role']
 
 
+# Role
 class RoleSerializer(serializers.ModelSerializer):
     subroles = SubroleNestedSerializer(many=True, read_only=True)
 
@@ -39,10 +40,10 @@ class RoleSerializer(serializers.ModelSerializer):
 class RoleNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
-        fields = '__all__'
+        fields = ['id', 'name']
 
 
-# User Related Serializers
+# User Register
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
@@ -67,18 +68,10 @@ class UserRegisterResponseSerializer(serializers.Serializer):
     password = serializers.CharField()
 
 
+# User Login
 class UserLoginSerializer(serializers.Serializer):
     login = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, required=True)
-
-
-class UserSerializer(serializers.ModelSerializer):
-    roles = RoleNestedSerializer(many=True, read_only=True)
-    subroles = SubroleNestedSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = User
-        exclude = ['password', 'last_login', 'is_admin']
 
 
 class UserTokenSerializer(serializers.ModelSerializer):
@@ -95,15 +88,46 @@ class UserTokenSerializer(serializers.ModelSerializer):
         return token.key
 
 
+# User
+class UserSerializer(serializers.ModelSerializer):
+    roles = RoleNestedSerializer(many=True, read_only=True)
+    subroles = SubroleNestedSerializer(many=True, read_only=True)
+    titles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        exclude = ['password', 'last_login', 'is_admin']
+
+    def get_titles(self, obj):
+        titles = Title.objects.filter(workers__user=obj).order_by('name')
+        return TitleListSerializer(titles, many=True).data
+
+
+class UserNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'username']
+
+
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['name', 'roles', 'subroles', 'discord_user_id']
 
 
-# Workers Serializers
+# Worker Template
 class WorkerTemplateSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = UserNestedSerializer(read_only=True)
+    role = RoleNestedSerializer(read_only=True)
+    subrole = SubroleNestedSerializer(read_only=True)
+
+    class Meta:
+        model = WorkerTemplate
+        exclude = ['title']
+
+
+class WorkerTemplateNestedSerializer(serializers.ModelSerializer):
+    user = UserNestedSerializer(read_only=True)
     role = RoleNestedSerializer(read_only=True)
     subrole = SubroleNestedSerializer(read_only=True)
 
@@ -118,10 +142,19 @@ class WorkerTemplateUpdateSerializer(serializers.ModelSerializer):
         exclude = ['title', 'role']
 
 
-class WorkerSerializer(WorkerTemplateSerializer):
+# Worker
+class WorkerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Worker
         exclude = ['chapter']
+
+
+class WorkerListSerializer(serializers.ModelSerializer):
+    role = RoleNestedSerializer(read_only=True)
+
+    class Meta:
+        model = Worker
+        fields = ['id', 'role', 'deadline', 'is_done']
 
 
 class WorkerUpdateSerializer(WorkerTemplateUpdateSerializer):
@@ -132,7 +165,7 @@ class WorkerUpdateSerializer(WorkerTemplateUpdateSerializer):
 
 # Title Serializers
 class TitleSerializer(serializers.ModelSerializer):
-    workers = WorkerTemplateSerializer(many=True, read_only=True)
+    workers = WorkerTemplateNestedSerializer(many=True, read_only=True)
 
     class Meta:
         model = Title
@@ -190,7 +223,6 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
             tome=validated_data.get('tome'),
             chapter=validated_data.get('chapter'),
             pages=validated_data.get('pages'),
-            url=self.context.get('url'),
             start_date=validated_data.get('start_date')
         )
 

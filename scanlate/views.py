@@ -7,6 +7,7 @@ from .serializers import *
 from .models import *
 from .permissions import IsAdmin, IsRawProvider, IsCurator, IsQualityChecker
 from .response import ScanlateResponse
+from .filters import *
 
 
 # HealthCheck
@@ -124,17 +125,20 @@ class UserViewSet(mixins.ListModelMixin,
         serializer = UserSerializer(instance=request.user)
         return ScanlateResponse(content=serializer.data)
 
+    @action(detail=True, methods=['get'])
+    def chapters(self, request, *args, **kwargs):
+        user = self.get_object()
+        is_done = query_param_to_bool(request.query_params.get('is_done'))
+        queryset = Worker.objects.filter(user=user, is_done=bool(is_done)).exclude(deadline=None)
+        serializer = WorkerListSerializer(queryset, many=True)
+        return ScanlateResponse(content=serializer.data)
+
 
 class TitleViewSet(viewsets.ModelViewSet):
+    queryset = Title.objects.all()
     permission_classes = [IsAdmin]
     lookup_field = 'slug'
-
-    def get_queryset(self):
-        if self.action == 'list':
-            user_id = self.request.query_params.get('user_id')
-            if user_id:
-                return Title.objects.filter(workers__user_id=user_id)
-        return Title.objects.all()
+    filter_backends = [TitleFilterBackend]
 
     def get_serializer_class(self):
         if self.action == 'list' or self.action == 'update':
@@ -163,21 +167,13 @@ class TitleViewSet(viewsets.ModelViewSet):
         serializer.save()
 
         response_serializer = self.get_serializer(instance)
-        return ScanlateResponse(content=serializer.data)
+        return ScanlateResponse(content=response_serializer.data)
 
 
 class ChapterViewSet(viewsets.ModelViewSet):
+    queryset = Chapter.objects.all()
     permission_classes = [IsAdmin]
-
-    def get_queryset(self):
-        if self.action == 'list':
-            title_id = self.request.query_params.get('title_id')
-            try:
-                title = Title.objects.get(pk=title_id)
-            except Title.DoesNotExist:
-                return Chapter.objects.none()
-            return title.chapters.all()
-        return Chapter.objects.all()
+    filter_backends = [ChapterFilterBackend]
 
     def get_serializer_class(self):
         if self.action == 'list' or self.action == 'update':
@@ -190,13 +186,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         return ScanlateResponse(content=serializer.data)
 
     def create(self, request, *args, **kwargs):
-        data = request.data
-
-        url_serializer = UrlSerializer(data=dict(url=data.pop('url', None)))
-        url_serializer.is_valid(raise_exception=True)
-        url = url_serializer.validated_data.get('url')
-
-        serializer = ChapterCreateSerializer(data=data, context=dict(url=url))
+        serializer = ChapterCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         chapter = serializer.save()
 
@@ -214,47 +204,11 @@ class ChapterViewSet(viewsets.ModelViewSet):
         return ScanlateResponse(content=response_serializer.data)
 
 
-class WorkerTemplateViewSet(mixins.UpdateModelMixin,
-                            viewsets.GenericViewSet):
-    queryset = WorkerTemplate.objects.all()
-    serializer_class = WorkerTemplateSerializer
-    permission_classes = [IsAdmin]
-
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = WorkerTemplateUpdateSerializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        user = serializer.validated_data.get('user')
-        if user and not user.roles.filter(pk=instance.role.pk).exists():
-            return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
-
-        instance = serializer.save()
-        response_serializer = self.get_serializer(instance=instance)
-        return ScanlateResponse(content=response_serializer.data)
-
-
-class WorkerViewSet(mixins.ListModelMixin,
-                    mixins.RetrieveModelMixin,
-                    mixins.UpdateModelMixin,
+class WorkerViewSet(mixins.UpdateModelMixin,
                     viewsets.GenericViewSet):
-    serializer_class = WorkerSerializer
+    queryset = Worker.objects.all()
     permission_classes = [IsAdmin]
-
-    def get_queryset(self):
-        if self.action == 'list':
-            user_id = self.request.query_params.get('user_id')
-            if user_id:
-                return Worker.objects.filter(user=user_id)
-            else:
-                return Worker.objects.none()
-        else:
-            return Worker.objects.all()
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return ScanlateResponse(content=serializer.data)
+    serializer_class = WorkerSerializer
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -277,3 +231,23 @@ class WorkerViewSet(mixins.ListModelMixin,
 
         worker.upload(serializer.validated_data.get('url'))
         return ScanlateResponse(msg='Successfully uploaded')
+
+
+class WorkerTemplateViewSet(mixins.UpdateModelMixin,
+                            viewsets.GenericViewSet):
+    queryset = WorkerTemplate.objects.all()
+    serializer_class = WorkerTemplateSerializer
+    permission_classes = [IsAdmin]
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = WorkerTemplateUpdateSerializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.validated_data.get('user')
+        if user and not user.roles.filter(pk=instance.role.pk).exists():
+            return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
+
+        instance = serializer.save()
+        response_serializer = self.get_serializer(instance=instance)
+        return ScanlateResponse(content=response_serializer.data)
