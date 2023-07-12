@@ -2,13 +2,6 @@
   {
     "model": "scanlate.Role",
     "fields": {
-      "name": "Равочник",
-      "slug": "raw-provider"
-    }
-  },
-  {
-    "model": "scanlate.Role",
-    "fields": {
       "name": "Куратор",
       "slug": "curator"
     }
@@ -16,9 +9,17 @@
   {
     "model": "scanlate.Role",
     "fields": {
+      "name": "Равочник",
+      "slug": "raw-provider",
+      "order": 0
+    }
+  },
+  {
+    "model": "scanlate.Role",
+    "fields": {
       "name": "Клинер",
       "slug": "cleaner",
-      "order": 0
+      "order": 1
     }
   },
   {
@@ -26,7 +27,7 @@
     "fields": {
       "name": "Переводчик",
       "slug": "translator",
-      "order": 0
+      "order": 1
     }
   },
   {
@@ -34,7 +35,7 @@
     "fields": {
       "name": "Тайпер",
       "slug": "typesetter",
-      "order": 1
+      "order": 2
     }
   },
   {
@@ -42,7 +43,7 @@
     "fields": {
       "name": "QC",
       "slug": "quality-checker",
-      "order": 2
+      "order": 3
     }
   }
 ]

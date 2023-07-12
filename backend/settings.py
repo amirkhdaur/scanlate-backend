@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'django_filters',
     
     'scanlate',
 ]
@@ -125,12 +126,11 @@ TEAM_SLUG = 'getmanshina-test'
 REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'scanlate.exceptions.scanlate_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'scanlate.pagination.CountPagePagination',
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'scanlate.authentication.ScanlateTokenAuthentication'
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated'
-    ]
+    # 'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['scanlate.authentication.ScanlateTokenAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated']
 }
 
 

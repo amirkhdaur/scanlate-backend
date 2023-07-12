@@ -2,7 +2,7 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, username, email, name, password, discord_user_id):
+    def create(self, username, email, name, password, discord_user_id):
         if not username:
             raise ValueError('Username must be set')
         if not email:
