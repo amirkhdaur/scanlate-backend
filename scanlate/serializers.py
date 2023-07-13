@@ -132,6 +132,8 @@ class UserRetrieveSerializer(serializers.ModelSerializer):
 
 
 class UserDetailRetrieveSerializer(UserRetrieveSerializer):
+    discord_id = serializers.CharField()
+
     class Meta:
         model = User
         fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id', 'balance']
