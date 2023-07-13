@@ -167,6 +167,7 @@ class UserViewSet(mixins.ListModelMixin,
     def status(self, request, *args, **kwargs):
         serializer = UserStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        serializer.save()
         return ScanlateResponse(content=serializer.data)
 
 
