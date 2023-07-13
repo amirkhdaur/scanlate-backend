@@ -165,7 +165,8 @@ class UserViewSet(mixins.ListModelMixin,
 
     @action(detail=True, methods=['put'])
     def status(self, request, *args, **kwargs):
-        serializer = UserStatusSerializer(data=request.data)
+        user = self.get_object()
+        serializer = UserStatusSerializer(instance=user, data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return ScanlateResponse(content=serializer.data)
