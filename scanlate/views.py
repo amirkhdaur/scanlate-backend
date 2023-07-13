@@ -1,12 +1,15 @@
 from rest_framework import viewsets, status, exceptions, views, mixins, generics
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
+from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
+from django.core import exceptions as django_exceptions
 
 from .serializers import *
-from .models import *
 from .permissions import *
 from .response import ScanlateResponse
 from .filters import *
+from .models import *
 
 
 # HealthCheck
@@ -23,7 +26,7 @@ class RoleViewSet(mixins.ListModelMixin,
                   viewsets.GenericViewSet):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [AllowAny]
 
 
 class SubroleViewSet(mixins.CreateModelMixin,
@@ -57,6 +60,14 @@ class SubroleViewSet(mixins.CreateModelMixin,
 
         response_serializer = self.get_serializer(instance=instance)
         return ScanlateResponse(content=response_serializer.data)
+
+
+# Status
+class StatusViewSet(mixins.ListModelMixin,
+                    viewsets.GenericViewSet):
+    queryset = Status.objects.all()
+    serializer_class = StatusSerializer
+    permission_classes = [AllowAny]
 
 
 # User
@@ -96,18 +107,39 @@ class UserLoginAPIView(views.APIView):
         return ScanlateResponse(content=response_serializer.data)
 
 
+class UserChangePassword(views.APIView):
+    def post(self, request):
+        user = request.user
+        password = request.data.get('password')
+
+        errors = {}
+        try:
+            validate_password(password=password, user=user)
+        except django_exceptions.ValidationError as e:
+            errors['password'] = list(e.messages)
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        user.set_password(password)
+        user.save()
+        return ScanlateResponse(msg='Password successfully changed')
+
+
 class UserViewSet(mixins.ListModelMixin,
                   mixins.RetrieveModelMixin,
                   mixins.UpdateModelMixin,
                   mixins.DestroyModelMixin,
                   viewsets.GenericViewSet):
     queryset = User.objects.all()
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdmin | IsSafeMethod]
 
     def get_serializer_class(self):
-        if self.action == 'retrieve':
-            return UserRetrieveSerializer
-        elif self.action == 'update':
+        if self.action == 'retrieve' or self.action == 'update':
+            if IsUser().has_object_permission(request=self.request, view=self, obj=self.get_object()) or \
+                    IsCurator().has_permission(self.request, self) or \
+                    IsAdmin().has_permission(self.request, self):
+                return UserDetailRetrieveSerializer
             return UserRetrieveSerializer
         else:
             return UserListSerializer
@@ -263,5 +295,5 @@ class UserChapters(views.APIView):
     def get(self, request):
         is_done = query_param_to_bool(request.query_params.get('is_done'))
         queryset = Worker.objects.filter(user=request.user, is_done=bool(is_done)).exclude(deadline=None)
-        serializer = WorkerListSerializer(queryset, many=True)
+        serializer = UserChaptersSerializer(queryset, many=True)
         return ScanlateResponse(content=serializer.data)

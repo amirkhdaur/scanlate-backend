@@ -5,7 +5,7 @@ from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
-    def create(self, username, email, name, password, discord_user_id):
+    def create(self, username, email, name, password):
         if not username:
             raise ValueError('Username must be set')
         if not email:
@@ -15,7 +15,7 @@ class UserManager(BaseUserManager):
 
         username = AbstractBaseUser.normalize_username(username)
         email = self.normalize_email(email)
-        user = self.model(username=username, email=email, name=name, discord_user_id=discord_user_id)
+        user = self.model(username=username, email=email, name=name)
         user.set_password(password)
         user.save()
         return user
@@ -107,7 +107,8 @@ class User(AbstractBaseUser):
     roles = models.ManyToManyField(Role, blank=True)
     subroles = models.ManyToManyField(Subrole, blank=True)
     balance = models.IntegerField(default=0)
-    discord_user_id = models.PositiveBigIntegerField()
+    discord_id = models.PositiveBigIntegerField(null=True)
+    vk_id = models.PositiveBigIntegerField(null=True)
     status = models.ForeignKey(Status, null=True, on_delete=models.SET_NULL)
 
     USERNAME_FIELD = 'email'
@@ -204,7 +205,7 @@ class Worker(models.Model):
 
     deadline = models.DateField(null=True)
     upload_time = models.DateTimeField(null=True)
-    url = models.URLField(null=True)
+    url = models.URLField(null=True, blank=True)
     is_done = models.BooleanField(default=False)
 
     def upload(self, url):
