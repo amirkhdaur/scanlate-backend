@@ -5,6 +5,11 @@ from rest_framework.authtoken.models import Token
 from .models import *
 
 
+class ScanlateFloatField(serializers.FloatField):
+    def to_representation(self, value):
+        return f'{value:g}'
+
+
 class UrlSerializer(serializers.Serializer):
     url = serializers.URLField(required=True)
 
@@ -90,17 +95,44 @@ class UserTokenSerializer(serializers.ModelSerializer):
 
 # User
 class UserSerializer(serializers.ModelSerializer):
-    roles = RoleNestedSerializer(many=True, read_only=True)
-    subroles = SubroleNestedSerializer(many=True, read_only=True)
-    titles = serializers.SerializerMethodField()
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', '']
+
+
+class UserListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username']
+
+
+class UserCurrentSerializer(serializers.ModelSerializer):
+    is_curator = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        exclude = ['password', 'last_login', 'is_admin']
+        fields = ['id', 'is_admin', 'is_curator']
 
-    def get_titles(self, obj):
-        titles = Title.objects.filter(workers__user=obj).order_by('name')
-        return TitleListSerializer(titles, many=True).data
+    def get_is_curator(self, obj):
+        return bool(obj.roles.filter(slug='curator').exists())
+
+
+class UserRetrieveSerializer(serializers.ModelSerializer):
+    roles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'roles', 'username', 'status', 'discord_user_id']
+
+    def get_roles(self, obj):
+        roles = []
+        for role in obj.roles.all():
+            data = RoleNestedSerializer(role).data
+            titles = Title.objects.filter(workers__user=obj, workers__role=role).order_by('name')
+            data['titles'] = TitleListSerializer(titles, many=True).data
+            data['titles_count'] = titles.count()
+            roles.append(data)
+        return roles
 
 
 class UserNestedSerializer(serializers.ModelSerializer):
@@ -113,6 +145,13 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['name', 'roles', 'subroles', 'discord_user_id']
+
+
+class UserStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['status']
+        extra_kwargs = {'status': {'required': True}}
 
 
 # Worker Template
@@ -175,7 +214,7 @@ class TitleSerializer(serializers.ModelSerializer):
 class TitleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        fields = '__all__'
+        fields = ['id', 'name', 'slug']
 
 
 class TitleCreateSerializer(serializers.ModelSerializer):
@@ -198,6 +237,7 @@ class TitleUpdateSerializer(serializers.ModelSerializer):
 
 # Chapter
 class ChapterSerializer(serializers.ModelSerializer):
+    chapter = ScanlateFloatField()
     workers = WorkerSerializer(many=True, read_only=True)
 
     class Meta:
@@ -206,6 +246,8 @@ class ChapterSerializer(serializers.ModelSerializer):
 
 
 class ChapterListSerializer(serializers.ModelSerializer):
+    chapter = ScanlateFloatField()
+
     class Meta:
         model = Chapter
         fields = '__all__'

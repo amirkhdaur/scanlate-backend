@@ -1,11 +1,10 @@
 from rest_framework import viewsets, status, exceptions, views, mixins, generics
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
 from .serializers import *
 from .models import *
-from .permissions import IsAdmin, IsRawProvider, IsCurator, IsQualityChecker
+from .permissions import *
 from .response import ScanlateResponse
 from .filters import *
 
@@ -104,7 +103,14 @@ class UserViewSet(mixins.ListModelMixin,
                   viewsets.GenericViewSet):
     queryset = User.objects.all()
     permission_classes = [IsAdmin]
-    serializer_class = UserSerializer
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return UserRetrieveSerializer
+        elif self.action == 'update':
+            return UserRetrieveSerializer
+        else:
+            return UserListSerializer
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -122,15 +128,13 @@ class UserViewSet(mixins.ListModelMixin,
 
     @action(detail=False, methods=['get'])
     def current(self, request):
-        serializer = UserSerializer(instance=request.user)
+        serializer = UserCurrentSerializer(instance=request.user)
         return ScanlateResponse(content=serializer.data)
 
-    @action(detail=True, methods=['get'])
-    def chapters(self, request, *args, **kwargs):
-        user = self.get_object()
-        is_done = query_param_to_bool(request.query_params.get('is_done'))
-        queryset = Worker.objects.filter(user=user, is_done=bool(is_done)).exclude(deadline=None)
-        serializer = WorkerListSerializer(queryset, many=True)
+    @action(detail=True, methods=['put'])
+    def status(self, request, *args, **kwargs):
+        serializer = UserStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         return ScanlateResponse(content=serializer.data)
 
 
@@ -251,3 +255,13 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
         instance = serializer.save()
         response_serializer = self.get_serializer(instance=instance)
         return ScanlateResponse(content=response_serializer.data)
+
+
+class UserChapters(views.APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        is_done = query_param_to_bool(request.query_params.get('is_done'))
+        queryset = Worker.objects.filter(user=request.user, is_done=bool(is_done)).exclude(deadline=None)
+        serializer = WorkerListSerializer(queryset, many=True)
+        return ScanlateResponse(content=serializer.data)

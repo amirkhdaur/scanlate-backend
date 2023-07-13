@@ -45,5 +45,33 @@
       "slug": "quality-checker",
       "order": 3
     }
+  },
+  {
+    "model": "scanlate.Status",
+    "fields": {
+      "name": "Марафон",
+      "slug": "marathon"
+    }
+  },
+  {
+    "model": "scanlate.Status",
+    "fields": {
+      "name": "Онгоинг",
+      "slug": "ongoing"
+    }
+  },
+  {
+    "model": "scanlate.Status",
+    "fields": {
+      "name": "Хватит",
+      "slug": "enough"
+    }
+  },
+  {
+    "model": "scanlate.Status",
+    "fields": {
+      "name": "Отпуск",
+      "slug": "vacation"
+    }
   }
 ]

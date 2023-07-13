@@ -1,9 +1,24 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.utils import timezone
 
-from .managers import UserManager
+
+class UserManager(BaseUserManager):
+    def create(self, username, email, name, password, discord_user_id):
+        if not username:
+            raise ValueError('Username must be set')
+        if not email:
+            raise ValueError('Email must be set')
+        if not name:
+            raise ValueError('Name must be set')
+
+        username = AbstractBaseUser.normalize_username(username)
+        email = self.normalize_email(email)
+        user = self.model(username=username, email=email, name=name, discord_user_id=discord_user_id)
+        user.set_password(password)
+        user.save()
+        return user
 
 
 class TitleManager(models.Manager):
@@ -79,6 +94,11 @@ class Subrole(models.Model):
     name = models.CharField(max_length=150)
 
 
+class Status(models.Model):
+    name = models.CharField(max_length=150)
+    slug = models.SlugField(unique=True)
+
+
 class User(AbstractBaseUser):
     username = models.CharField(max_length=150, unique=True, validators=[UnicodeUsernameValidator])
     email = models.EmailField(unique=True)
@@ -88,6 +108,7 @@ class User(AbstractBaseUser):
     subroles = models.ManyToManyField(Subrole, blank=True)
     balance = models.IntegerField(default=0)
     discord_user_id = models.PositiveBigIntegerField()
+    status = models.ForeignKey(Status, null=True, on_delete=models.SET_NULL)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'name']
