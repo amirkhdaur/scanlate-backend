@@ -118,7 +118,7 @@ class UserRetrieveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'roles', 'username', 'status', 'discord_user_id']
+        fields = ['id', 'roles', 'username', 'status']
 
     def get_roles(self, obj):
         roles = []
@@ -134,7 +134,7 @@ class UserRetrieveSerializer(serializers.ModelSerializer):
 class UserDetailRetrieveSerializer(UserRetrieveSerializer):
     class Meta:
         model = User
-        fields = ['id', 'roles', 'username', 'status', 'discord_user_id', 'balance']
+        fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id', 'balance']
 
 
 class UserNestedSerializer(serializers.ModelSerializer):
@@ -146,7 +146,7 @@ class UserNestedSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['name', 'roles', 'subroles', 'discord_user_id']
+        fields = ['name', 'roles', 'subroles', 'discord_id', 'vk_id']
 
 
 class UserStatusSerializer(serializers.ModelSerializer):

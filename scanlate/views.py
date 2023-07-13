@@ -132,16 +132,14 @@ class UserViewSet(mixins.ListModelMixin,
                   mixins.DestroyModelMixin,
                   viewsets.GenericViewSet):
     queryset = User.objects.all()
-    permission_classes = [UserPermission]
+    permission_classes = [IsAdmin | IsSafeMethod]
 
     def get_serializer_class(self):
-        if self.action == 'retrieve':
+        if self.action == 'retrieve' or self.action == 'update':
             if IsUser().has_object_permission(request=self.request, view=self, obj=self.get_object()) or \
                     IsCurator().has_permission(self.request, self) or \
                     IsAdmin().has_permission(self.request, self):
                 return UserDetailRetrieveSerializer
-            return UserRetrieveSerializer
-        elif self.action == 'update':
             return UserRetrieveSerializer
         else:
             return UserListSerializer
