@@ -115,6 +115,7 @@ class UserCurrentSerializer(serializers.ModelSerializer):
 
 class UserRetrieveSerializer(serializers.ModelSerializer):
     roles = serializers.SerializerMethodField()
+    status = StatusSerializer(read_only=True)
 
     class Meta:
         model = User
