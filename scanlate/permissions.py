@@ -8,6 +8,11 @@ class IsAdmin(BasePermission):
         return bool(request.user.is_authenticated and request.user.is_admin)
 
 
+class IsUser(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        return request.user == obj
+
+
 def has_role(request, obj, slug):
     if isinstance(obj, Title):
         title = obj
