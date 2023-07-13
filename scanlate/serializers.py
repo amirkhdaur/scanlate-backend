@@ -1,4 +1,3 @@
-from django.contrib.auth import authenticate
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 
@@ -39,12 +38,19 @@ class RoleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Role
-        fields = '__all__'
+        fields = ['id', 'name', 'subroles']
 
 
 class RoleNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
+        fields = ['id', 'name']
+
+
+# Status
+class StatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Status
         fields = ['id', 'name']
 
 
@@ -54,17 +60,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'name', 'password', 'discord_user_id']
-
-    def create(self, validated_data):
-        user = User.objects.create_user(
-            username=validated_data.get('username'),
-            email=validated_data.get('email'),
-            name=validated_data.get('name'),
-            password=validated_data.get('password'),
-            discord_user_id=validated_data.get('discord_user_id'),
-        )
-        return user
+        fields = ['username', 'email', 'name', 'password']
 
 
 class UserRegisterResponseSerializer(serializers.Serializer):
@@ -135,10 +131,16 @@ class UserRetrieveSerializer(serializers.ModelSerializer):
         return roles
 
 
+class UserDetailRetrieveSerializer(UserRetrieveSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'roles', 'username', 'status', 'discord_user_id', 'balance']
+
+
 class UserNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'name', 'username']
+        fields = ['id', 'username']
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
@@ -235,6 +237,14 @@ class TitleUpdateSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class TitleAnySerializer(serializers.ModelSerializer):
+    workers = WorkerTemplateNestedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Title
+        fields = ['id', 'name', 'slug', 'is_active']
+
+
 # Chapter
 class ChapterSerializer(serializers.ModelSerializer):
     chapter = ScanlateFloatField()
@@ -273,3 +283,25 @@ class ChapterUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chapter
         fields = ['tome', 'chapter', 'pages']
+
+
+# User Chapters
+class WorkerUrlSerializer(serializers.ModelSerializer):
+    user = UserNestedSerializer(read_only=True)
+    role = RoleNestedSerializer(read_only=True)
+
+    class Meta:
+        model = Worker
+        fields = ['user', 'role', 'url']
+
+
+class UserChaptersSerializer(serializers.ModelSerializer):
+    role = RoleNestedSerializer(read_only=True)
+    urls = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Worker
+        fields = ['id', 'role', 'deadline', 'is_done', 'urls']
+
+    def get_urls(self, obj):
+        return WorkerUrlSerializer(obj.chapter.workers.filter(role__order=obj.role.order-1), many=True).data

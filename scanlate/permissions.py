@@ -1,42 +1,36 @@
-from rest_framework.permissions import BasePermission
+from rest_framework import permissions
 
-from .models import Title, Chapter
+from .models import *
 
 
-class IsAdmin(BasePermission):
+class ScanlatePermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+
+class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         return bool(request.user.is_authenticated and request.user.is_admin)
 
 
-class IsUser(BasePermission):
-    def has_object_permission(self, request, view, obj):
-        return request.user == obj
-
-
-def has_role(request, obj, slug):
-    if isinstance(obj, Title):
-        title = obj
-    elif isinstance(obj, Chapter):
-        title = obj.title
-    else:
-        return False
-
-    return bool(title.workers.filter(user=request.user, role__slug=slug).exists())
-
-
-class IsRawProvider(BasePermission):
+class UserPermission(permissions.BasePermission):
     def has_permission(self, request, view):
-        view.get_queryset()
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return bool(request.user.is_authenticated and request.user.is_admin)
 
     def has_object_permission(self, request, view, obj):
-        return has_role(request, obj, 'raw-provider')
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj == request.user
 
 
-class IsCurator(BasePermission):
+class IsUser(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
-        return has_role(request, obj, 'curator')
+        return obj == request.user
 
 
-class IsQualityChecker(BasePermission):
-    def has_object_permission(self, request, view, obj):
-        return has_role(request, obj, 'quality-checker')
+class IsCurator(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user.is_authenticated and request.user.roles.filter(slug='curator'))

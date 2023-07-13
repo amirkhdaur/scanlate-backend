@@ -11,6 +11,7 @@ router.register(r'titles/chapters', views.ChapterViewSet)
 router.register(r'titles/workers', views.WorkerTemplateViewSet)
 router.register(r'titles', views.TitleViewSet)
 router.register(r'users', views.UserViewSet)
+router.register(r'statuses', views.StatusViewSet)
 
 urlpatterns = [
     re_path(r'healthcheck/?$', views.HealthCheckAPIView.as_view()),
@@ -18,6 +19,7 @@ urlpatterns = [
     # Auth
     re_path(r'auth/register/?$', views.UserRegisterAPIView.as_view()),
     re_path(r'auth/login/?$', views.UserLoginAPIView.as_view()),
+    re_path(r'auth/change-password/?$', views.UserChangePassword.as_view()),
 
     # Chapters
     re_path(r'chapters/?$', views.UserChapters.as_view()),
