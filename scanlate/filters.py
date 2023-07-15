@@ -1,13 +1,17 @@
 from rest_framework.filters import BaseFilterBackend
-from django.utils import timezone
-
-from .models import Role
 
 
 def query_param_to_bool(query_param):
     if query_param is None:
         return None
     return query_param.isdigit() and bool(int(query_param))
+
+
+class UserFilterBackend(BaseFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        if view.action == 'list':
+            return queryset.order_by('username')
+        return queryset
 
 
 class TitleFilterBackend(BaseFilterBackend):

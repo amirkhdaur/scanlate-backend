@@ -21,58 +21,9 @@ class HealthCheckAPIView(views.APIView):
         return ScanlateResponse(msg='Good')
 
 
-# Role & Subrole
-class RoleViewSet(mixins.ListModelMixin,
-                  viewsets.GenericViewSet):
-    queryset = Role.objects.all()
-    serializer_class = RoleSerializer
-    permission_classes = [AllowAny]
-
-
-class SubroleViewSet(mixins.CreateModelMixin,
-                     mixins.DestroyModelMixin,
-                     mixins.UpdateModelMixin,
-                     viewsets.GenericViewSet):
-    queryset = Subrole.objects.all()
-    serializer_class = SubroleSerializer
-    permission_classes = [IsAdmin]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        role = serializer.validated_data.get('role')
-
-        if role.subroles.filter(name=serializer.validated_data.get('name')).exists():
-            return ScanlateResponse(msg='This subrole is already exists', status=status.HTTP_400_BAD_REQUEST)
-        serializer.save()
-
-        headers = self.get_success_headers(serializer.data)
-        return ScanlateResponse(content=serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = SubroleUpdateSerializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        if instance.role.subroles.filter(name=serializer.validated_data.get('name')).exists():
-            return ScanlateResponse(msg='This subrole is already exists', status=status.HTTP_400_BAD_REQUEST)
-        instance = serializer.save()
-
-        response_serializer = self.get_serializer(instance=instance)
-        return ScanlateResponse(content=response_serializer.data)
-
-
-# Status
-class StatusViewSet(mixins.ListModelMixin,
-                    viewsets.GenericViewSet):
-    queryset = Status.objects.all()
-    serializer_class = StatusSerializer
-    permission_classes = [AllowAny]
-
-
 # User
 class UserRegisterAPIView(views.APIView):
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdmin | IsCurator]
 
     def post(self, request, *args, **kwargs):
         password = User.objects.make_random_password()
@@ -132,7 +83,15 @@ class UserViewSet(mixins.ListModelMixin,
                   mixins.DestroyModelMixin,
                   viewsets.GenericViewSet):
     queryset = User.objects.all()
-    permission_classes = [IsAdmin | IsSafeMethod]
+    filter_backends = [UserFilterBackend]
+
+    def get_permissions(self):
+        permission_classes = []
+        if self.action == 'update':
+            permission_classes = [IsCurator | IsAdmin]
+        elif self.action == 'destroy':
+            permission_classes = [IsAdmin]
+        return [permission() for permission in permission_classes]
 
     def get_serializer_class(self):
         if self.action == 'retrieve' or self.action == 'update':
@@ -163,10 +122,9 @@ class UserViewSet(mixins.ListModelMixin,
         serializer = UserCurrentSerializer(instance=request.user)
         return ScanlateResponse(content=serializer.data)
 
-    @action(detail=True, methods=['put'])
+    @action(detail=False, methods=['put'])
     def status(self, request, *args, **kwargs):
-        user = self.get_object()
-        serializer = UserStatusSerializer(instance=user, data=request.data)
+        serializer = UserStatusSerializer(instance=request.user, data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return ScanlateResponse(content=serializer.data)
@@ -174,15 +132,13 @@ class UserViewSet(mixins.ListModelMixin,
 
 class TitleViewSet(viewsets.ModelViewSet):
     queryset = Title.objects.all()
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdmin | IsSafeMethod]
     lookup_field = 'slug'
     filter_backends = [TitleFilterBackend]
 
     def get_serializer_class(self):
-        if self.action == 'list' or self.action == 'update':
-            return TitleListSerializer
-        else:
-            return TitleSerializer
+        if self.action == 'retrieve':
+            return Title
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -254,7 +210,7 @@ class WorkerViewSet(mixins.UpdateModelMixin,
         serializer.is_valid(raise_exception=True)
 
         user = serializer.validated_data.get('user')
-        if user and not user.roles.filter(pk=instance.role.pk).exists():
+        if instance.role not in user.roles:
             return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
 
         instance = serializer.save()
@@ -283,7 +239,7 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
         serializer.is_valid(raise_exception=True)
 
         user = serializer.validated_data.get('user')
-        if user and not user.roles.filter(pk=instance.role.pk).exists():
+        if instance.role not in user.roles:
             return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
 
         instance = serializer.save()
@@ -292,8 +248,6 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
 
 
 class UserChapters(views.APIView):
-    permission_classes = [AllowAny]
-
     def get(self, request):
         is_done = query_param_to_bool(request.query_params.get('is_done'))
         queryset = Worker.objects.filter(user=request.user, is_done=bool(is_done)).exclude(deadline=None)

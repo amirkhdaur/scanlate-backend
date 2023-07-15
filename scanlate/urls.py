@@ -4,14 +4,11 @@ from . import views
 from .routers import ScanlateRouter
 
 router = ScanlateRouter()
-router.register(r'roles/subroles', views.SubroleViewSet)
-router.register(r'roles', views.RoleViewSet)
 router.register(r'titles/chapters/workers', views.WorkerViewSet)
 router.register(r'titles/chapters', views.ChapterViewSet)
 router.register(r'titles/workers', views.WorkerTemplateViewSet)
 router.register(r'titles', views.TitleViewSet)
 router.register(r'users', views.UserViewSet)
-router.register(r'statuses', views.StatusViewSet)
 
 urlpatterns = [
     re_path(r'healthcheck/?$', views.HealthCheckAPIView.as_view()),

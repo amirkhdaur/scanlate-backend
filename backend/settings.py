@@ -79,8 +79,6 @@ DATABASES = {
 
 AUTH_USER_MODEL = 'scanlate.User'
 
-AUTHENTICATION_BACKENDS = ['scanlate.backends.EmailOrUsernameModelBackend']
-
 AUTH_PASSWORD_VALIDATORS = [
     # {
     #     'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -109,7 +107,10 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-TEAM_SLUG = 'getmanshina-test'
+
+# Parser
+REMANGA_TEAM_ID = env.int('REMANGA_TEAM_ID')
+REMANGA_TOKEN = env('REMANGA_TOKEN')
 
 
 # Rest Framwork
