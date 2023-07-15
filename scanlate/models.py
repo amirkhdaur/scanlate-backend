@@ -48,10 +48,9 @@ class RoleExtra:
 
 
 class UserManager(BaseUserManager):
-    def create(self, username, email, name, password):
+    def create(self, username, password):
         username = AbstractBaseUser.normalize_username(username)
-        email = self.normalize_email(email)
-        user = self.model(username=username, email=email, name=name)
+        user = self.model(username=username)
         user.set_password(password)
         user.save()
         return user

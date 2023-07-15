@@ -33,7 +33,6 @@ class UserRegisterAPIView(views.APIView):
         user = serializer.save()
         data = {
             'username': user.username,
-            'email': user.email,
             'password': password
         }
         return ScanlateResponse(content=data)

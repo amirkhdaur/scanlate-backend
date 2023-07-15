@@ -21,20 +21,17 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'name', 'password']
+        fields = ['username', 'password']
 
     def create(self, validated_data):
         return User.objects.create(
             username=validated_data.get('username'),
-            email=validated_data.get('email'),
-            name=validated_data.get('name'),
             password=validated_data.get('password')
         )
 
 
 class UserRegisterResponseSerializer(serializers.Serializer):
     username = serializers.CharField()
-    email = serializers.EmailField()
     password = serializers.CharField()
 
 
@@ -60,7 +57,7 @@ class UserTokenSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', '']
+        fields = ['id', 'username']
 
 
 class UserListSerializer(serializers.ModelSerializer):
