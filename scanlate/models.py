@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, User
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.contrib.postgres.fields import ArrayField
 from django.utils import timezone
@@ -35,7 +35,7 @@ class RoleExtra:
         Role.TYPESETTER: [Role.CLEANER, Role.TRANSLATOR],
         Role.QUALITY_CHECKER: [Role.TYPESETTER]
     }
-    continuations: {
+    continuations = {
         Role.CURATOR: [Role.RAW_PROVIDER],
         Role.RAW_PROVIDER: [Role.TRANSLATOR, Role.CLEANER],
         Role.CLEANER: [Role.TYPESETTER],
@@ -48,9 +48,9 @@ class RoleExtra:
 
 
 class UserManager(BaseUserManager):
-    def create(self, username, password):
+    def create(self, username, password, roles):
         username = AbstractBaseUser.normalize_username(username)
-        user = self.model(username=username)
+        user = self.model(username=username, roles=roles)
         user.set_password(password)
         user.save()
         return user
@@ -86,7 +86,6 @@ class ChapterManager(models.Manager):
                 chapter=chapter,
                 user=worker.user,
                 role=worker.role,
-                subrole=worker.subrole,
                 rate=worker.rate,
                 is_paid_by_pages=worker.is_paid_by_pages,
                 days_for_work=worker.days_for_work
@@ -132,6 +131,9 @@ class User(AbstractBaseUser):
 
     objects = UserManager()
 
+    class Meta:
+        ordering = ['username']
+
 
 class Title(models.Model):
     name = models.CharField(max_length=300)
@@ -142,6 +144,9 @@ class Title(models.Model):
     type = models.CharField(blank=True, default='')
 
     objects = TitleManager()
+
+    class Meta:
+        ordering = ['name']
 
 
 class Chapter(models.Model):
@@ -157,6 +162,9 @@ class Chapter(models.Model):
     is_published = models.BooleanField(default=False)
 
     objects = ChapterManager()
+
+    class Meta:
+        ordering = ['tome', 'chapter']
 
     def set_published_status(self):
         if not self.is_published and not self.workers.filter(is_done=False).exists():
@@ -182,7 +190,7 @@ class Chapter(models.Model):
 
     def calculate_deadlines(self, current_role):
         dependencies = RoleExtra.dependencies
-        continuations: RoleExtra.continuations
+        continuations = RoleExtra.continuations
         first_role = RoleExtra.first_role
         last_role = RoleExtra.last_role
 
@@ -194,7 +202,7 @@ class Chapter(models.Model):
             if not self.workers.filter(role__in=dependencies[role], is_done=False).exists():
                 worker = self.workers.get(role=role)
 
-                if current_role == first_role:
+                if role == first_role:
                     date = self.start_date - timezone.timedelta(days=1)
                 else:
                     date = timezone.localdate(self.workers.filter(role__in=dependencies[role])
@@ -203,10 +211,10 @@ class Chapter(models.Model):
                 worker.save()
 
     def start(self):
-        self.calculate_deadlines(Role.CURATOR)
         curator = self.workers.get(role=Role.CURATOR)
         curator.is_done = True
         curator.save()
+        self.calculate_deadlines(Role.CURATOR)
 
     def end(self):
         self.end_date = timezone.localdate()
@@ -223,6 +231,9 @@ class WorkerTemplate(models.Model):
 
     days_for_work = models.IntegerField(default=2)
 
+    class Meta:
+        ordering = ['role']
+
 
 class Worker(models.Model):
     chapter = models.ForeignKey(Chapter, related_name='workers', on_delete=models.CASCADE)
@@ -238,6 +249,9 @@ class Worker(models.Model):
     upload_time = models.DateTimeField(null=True)
     url = models.URLField(null=True, blank=True)
     is_done = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['role']
 
     def upload(self, url):
         self.upload_time = timezone.localtime()

@@ -53,7 +53,7 @@ class UserLoginAPIView(views.APIView):
         if not user:
             return ScanlateResponse(msg='Invalid login or password', status=status.HTTP_400_BAD_REQUEST)
 
-        response_serializer = UserTokenSerializer(instance=user)
+        response_serializer = UserLoginResponseSerializer(instance=user)
         return ScanlateResponse(content=response_serializer.data)
 
 
@@ -131,17 +131,25 @@ class UserViewSet(mixins.ListModelMixin,
 
 class TitleViewSet(viewsets.ModelViewSet):
     queryset = Title.objects.all()
-    permission_classes = [IsAdmin | IsSafeMethod]
+    permission_classes = [IsAdmin | IsCurator | IsSafeMethod]
     lookup_field = 'slug'
     filter_backends = [TitleFilterBackend]
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
-            return Title
+            if IsCurator().has_permission(self.request, self) or \
+                    IsAdmin().has_permission(self.request, self):
+                return TitleDetailRetrieveSerializer
+            return TitleRetrieveSerializer
+        elif self.action == 'create':
+            return TitleDetailRetrieveSerializer
+        elif self.action == 'update':
+            return TitleUpdateResponseSerializer
+        return TitleListSerializer
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = self.get_serializer(instance)
+        serializer = self.get_serializer(instance=instance, context={'user': request.user})
         return ScanlateResponse(content=serializer.data)
 
     def create(self, request, *args, **kwargs):
@@ -165,13 +173,17 @@ class TitleViewSet(viewsets.ModelViewSet):
 
 class ChapterViewSet(viewsets.ModelViewSet):
     queryset = Chapter.objects.all()
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdmin | IsCurator]
     filter_backends = [ChapterFilterBackend]
 
     def get_serializer_class(self):
-        if self.action == 'list' or self.action == 'update':
-            return ChapterListSerializer
-        return ChapterSerializer
+        if self.action == 'retrieve':
+            return ChapterRetrieveSerializer
+        elif self.action == 'update':
+            return ChapterUpdateResponseSerializer
+        elif self.action == 'create':
+            return ChapterRetrieveSerializer
+        return ChapterListSerializer
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -200,8 +212,8 @@ class ChapterViewSet(viewsets.ModelViewSet):
 class WorkerViewSet(mixins.UpdateModelMixin,
                     viewsets.GenericViewSet):
     queryset = Worker.objects.all()
-    permission_classes = [IsAdmin]
-    serializer_class = WorkerSerializer
+    permission_classes = [IsAdmin | IsCurator]
+    serializer_class = WorkerUpdateResponseSerializer
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -216,7 +228,7 @@ class WorkerViewSet(mixins.UpdateModelMixin,
         response_serializer = self.get_serializer(instance=instance)
         return ScanlateResponse(content=response_serializer.data)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsWorker])
     def upload(self, request, *args, **kwargs):
         worker = self.get_object()
         serializer = UrlSerializer(data=request.data)
@@ -230,7 +242,7 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
                             viewsets.GenericViewSet):
     queryset = WorkerTemplate.objects.all()
     serializer_class = WorkerTemplateSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdmin | IsCurator]
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -249,6 +261,11 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
 class UserChapters(views.APIView):
     def get(self, request):
         is_done = query_param_to_bool(request.query_params.get('is_done'))
+        title_id = request.query_params.get('title_id')
         queryset = Worker.objects.filter(user=request.user, is_done=bool(is_done)).exclude(deadline=None)
+
+        if title_id is not None:
+            queryset = queryset.filter(chapter__title_id=title_id)
+
         serializer = UserChaptersSerializer(queryset, many=True)
         return ScanlateResponse(content=serializer.data)

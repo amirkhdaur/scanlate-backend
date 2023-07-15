@@ -12,7 +12,19 @@ class ScanlateFloatField(serializers.FloatField):
 
 
 class UrlSerializer(serializers.Serializer):
-    url = serializers.URLField(required=True)
+    url = serializers.URLField(required=True, allow_blank=True)
+
+
+# User Current
+class UserCurrentSerializer(serializers.ModelSerializer):
+    is_curator = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'is_admin', 'is_curator', 'balance']
+
+    def get_is_curator(self, obj):
+        return Role.CURATOR in obj.roles
 
 
 # User Register
@@ -21,12 +33,14 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'password']
+        fields = ['username', 'password', 'roles']
+        extra_kwargs = {'roles': {'required': True}}
 
     def create(self, validated_data):
         return User.objects.create(
             username=validated_data.get('username'),
-            password=validated_data.get('password')
+            password=validated_data.get('password'),
+            roles=validated_data.get('roles')
         )
 
 
@@ -41,12 +55,12 @@ class UserLoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True)
 
 
-class UserTokenSerializer(serializers.ModelSerializer):
+class UserLoginResponseSerializer(UserCurrentSerializer):
     token = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        exclude = ['password', 'last_login', 'is_admin']
+        fields = ['id', 'is_admin', 'is_curator', 'token', 'balance']
 
     def get_token(self, obj):
         token, created = Token.objects.get_or_create(user=obj)
@@ -64,17 +78,6 @@ class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username']
-
-
-class UserCurrentSerializer(serializers.ModelSerializer):
-    is_curator = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ['id', 'is_admin', 'is_curator']
-
-    def get_is_curator(self, obj):
-        return Role.CURATOR in obj.roles
 
 
 class UserRetrieveSerializer(serializers.ModelSerializer):
@@ -114,7 +117,7 @@ class UserNestedSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['name', 'roles', 'discord_id', 'vk_id']
+        fields = ['roles', 'discord_id', 'vk_id']
 
 
 class UserStatusSerializer(serializers.ModelSerializer):
@@ -138,6 +141,14 @@ class WorkerTemplateNestedSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = WorkerTemplate
+        fields = ['id', 'user', 'role']
+
+
+class WorkerTemplateDetailNestedSerializer(serializers.ModelSerializer):
+    user = UserNestedSerializer(read_only=True)
+
+    class Meta:
+        model = WorkerTemplate
         exclude = ['title']
 
 
@@ -148,22 +159,26 @@ class WorkerTemplateUpdateSerializer(serializers.ModelSerializer):
 
 
 # Worker
-class WorkerSerializer(serializers.ModelSerializer):
+class WorkerUpdateSerializer(WorkerTemplateUpdateSerializer):
+    class Meta:
+        model = Worker
+        fields = ['rate', 'is_paid_by_pages', 'days_for_work', 'user']
+
+
+class WorkerUpdateResponseSerializer(WorkerTemplateUpdateSerializer):
+    user = UserNestedSerializer(read_only=True)
+
     class Meta:
         model = Worker
         exclude = ['chapter']
 
 
-class WorkerListSerializer(serializers.ModelSerializer):
+class WorkerNestedSerializer(WorkerTemplateUpdateSerializer):
+    user = UserNestedSerializer(read_only=True)
+
     class Meta:
         model = Worker
-        fields = ['id', 'role', 'deadline', 'is_done']
-
-
-class WorkerUpdateSerializer(WorkerTemplateUpdateSerializer):
-    class Meta:
-        model = Worker
-        exclude = ['chapter', 'role', 'upload_time', 'is_done', 'url']
+        exclude = ['chapter']
 
 
 # Title Serializers
@@ -174,17 +189,19 @@ class TitleListSerializer(serializers.ModelSerializer):
 
 
 class TitleRetrieveSerializer(serializers.ModelSerializer):
-    workers = WorkerTemplateNestedSerializer(many=True)
+    workers = WorkerTemplateNestedSerializer(many=True, read_only=True)
 
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug', 'is_active', 'type']
+        fields = ['id', 'name', 'slug', 'is_active', 'type', 'workers']
 
 
 class TitleDetailRetrieveSerializer(TitleRetrieveSerializer):
+    workers = WorkerTemplateDetailNestedSerializer(many=True, read_only=True)
+
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug', 'is_active', 'type', 'ad_date']
+        fields = ['id', 'name', 'slug', 'is_active', 'type', 'ad_date', 'workers']
 
 
 class TitleCreateSerializer(serializers.ModelSerializer):
@@ -194,6 +211,12 @@ class TitleCreateSerializer(serializers.ModelSerializer):
 
 
 class TitleUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Title
+        fields = '__all__'
+
+
+class TitleUpdateResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
         fields = '__all__'
@@ -222,9 +245,9 @@ class TitleUrlCreateSerializer(serializers.Serializer):
 
 
 # Chapter
-class ChapterSerializer(serializers.ModelSerializer):
+class ChapterRetrieveSerializer(serializers.ModelSerializer):
     chapter = ScanlateFloatField()
-    workers = WorkerSerializer(many=True, read_only=True)
+    workers = WorkerNestedSerializer(many=True, read_only=True)
 
     class Meta:
         model = Chapter
@@ -252,6 +275,14 @@ class ChapterUpdateSerializer(serializers.ModelSerializer):
         fields = ['tome', 'chapter', 'pages']
 
 
+class ChapterUpdateResponseSerializer(serializers.ModelSerializer):
+    chapter = ScanlateFloatField()
+
+    class Meta:
+        model = Chapter
+        fields = '__all__'
+
+
 # User Chapters
 class WorkerUrlSerializer(serializers.ModelSerializer):
     user = UserNestedSerializer(read_only=True)
@@ -269,5 +300,7 @@ class UserChaptersSerializer(serializers.ModelSerializer):
         fields = ['id', 'role', 'deadline', 'is_done', 'urls']
 
     def get_urls(self, obj):
+        if obj.role == RoleExtra.first_role:
+            return []
         return WorkerUrlSerializer(obj.chapter.workers.filter(role__in=RoleExtra.dependencies[obj.role]),
                                    many=True).data
