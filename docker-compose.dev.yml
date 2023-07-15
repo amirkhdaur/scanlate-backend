@@ -29,6 +29,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
+      REMANGA_TOKEN: ${REMANGA_TOKEN}
+      REMANGA_TEAM_ID: ${REMANGA_TEAM_ID}
     command: >
       sh -c "
         python manage.py makemigrations scanlate &&
