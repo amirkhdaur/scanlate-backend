@@ -1,18 +1,54 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, User
 from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.contrib.postgres.fields import ArrayField
 from django.utils import timezone
+
+
+class Status(models.IntegerChoices):
+    MARATHON = 0
+    ONGOING = 1
+    ENOUGH = 2
+    VACATION = 3
+
+
+class Role(models.IntegerChoices):
+    CURATOR = 0
+    RAW_PROVIDER = 1
+    CLEANER = 2
+    TRANSLATOR = 3
+    TYPESETTER = 4
+    QUALITY_CHECKER = 5
+
+
+class PaymentType(models.IntegerChoices):
+    IN = 0
+    OUT = 1
+
+
+class RoleExtra:
+    dependencies = {
+        Role.CURATOR: [],
+        Role.RAW_PROVIDER: [Role.CURATOR],
+        Role.CLEANER: [Role.RAW_PROVIDER],
+        Role.TRANSLATOR: [Role.RAW_PROVIDER],
+        Role.TYPESETTER: [Role.CLEANER, Role.TRANSLATOR],
+        Role.QUALITY_CHECKER: [Role.TYPESETTER]
+    }
+    continuations: {
+        Role.CURATOR: [Role.RAW_PROVIDER],
+        Role.RAW_PROVIDER: [Role.TRANSLATOR, Role.CLEANER],
+        Role.CLEANER: [Role.TYPESETTER],
+        Role.TRANSLATOR: [Role.TYPESETTER],
+        Role.TYPESETTER: [Role.QUALITY_CHECKER],
+        Role.QUALITY_CHECKER: []
+    }
+    first_role = Role.RAW_PROVIDER
+    last_role = Role.QUALITY_CHECKER
 
 
 class UserManager(BaseUserManager):
     def create(self, username, email, name, password):
-        if not username:
-            raise ValueError('Username must be set')
-        if not email:
-            raise ValueError('Email must be set')
-        if not name:
-            raise ValueError('Name must be set')
-
         username = AbstractBaseUser.normalize_username(username)
         email = self.normalize_email(email)
         user = self.model(username=username, email=email, name=name)
@@ -24,9 +60,10 @@ class UserManager(BaseUserManager):
 class TitleManager(models.Manager):
     def create(self, name, slug):
         title = super().create(name=name, slug=slug)
+
         to_create = [
             WorkerTemplate(title=title, role=role)
-            for role in Role.objects.all()
+            for role in Role.values
         ]
         WorkerTemplate.objects.bulk_create(to_create)
         return title
@@ -58,17 +95,16 @@ class ChapterManager(models.Manager):
             for worker in title.workers.all()
         ]
         Worker.objects.bulk_create(to_create)
-
-        chapter.calculate_deadlines(order=0)
+        chapter.start()
         return chapter
 
 
 class PaymentManager(models.Manager):
     def create(self, user, amount, payment_type, worker=None):
-        if payment_type == 'in':
+        if payment_type == PaymentType.IN:
             user.balance += amount
             user.save()
-        elif payment_type == 'out':
+        elif payment_type == PaymentType.OUT:
             user.balance -= amount
             user.save()
         else:
@@ -83,36 +119,17 @@ class PaymentManager(models.Manager):
         )
 
 
-class Role(models.Model):
-    name = models.CharField(max_length=150)
-    slug = models.SlugField(unique=True)
-    order = models.PositiveSmallIntegerField(null=True)
-
-
-class Subrole(models.Model):
-    role = models.ForeignKey(Role, related_name='subroles', on_delete=models.CASCADE)
-    name = models.CharField(max_length=150)
-
-
-class Status(models.Model):
-    name = models.CharField(max_length=150)
-    slug = models.SlugField(unique=True)
-
-
 class User(AbstractBaseUser):
     username = models.CharField(max_length=150, unique=True, validators=[UnicodeUsernameValidator])
-    email = models.EmailField(unique=True)
-    name = models.CharField(max_length=300)
     is_admin = models.BooleanField(default=False)
-    roles = models.ManyToManyField(Role, blank=True)
-    subroles = models.ManyToManyField(Subrole, blank=True)
+    roles = ArrayField(models.IntegerField(choices=Role.choices), blank=True, default=list)
     balance = models.IntegerField(default=0)
     discord_id = models.PositiveBigIntegerField(null=True)
     vk_id = models.PositiveBigIntegerField(null=True)
-    status = models.ForeignKey(Status, null=True, on_delete=models.SET_NULL)
+    status = models.IntegerField(null=True, choices=Status.choices)
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'name']
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = []
 
     objects = UserManager()
 
@@ -123,6 +140,7 @@ class Title(models.Model):
 
     is_active = models.BooleanField(default=True)
     ad_date = models.DateField(null=True, default=None)
+    type = models.CharField(blank=True, default='')
 
     objects = TitleManager()
 
@@ -154,36 +172,52 @@ class Chapter(models.Model):
                 Payment.objects.create(
                     user=worker.user,
                     amount=amount,
-                    payment_type='in',
+                    payment_type=PaymentType.IN,
                     worker=worker
                 )
 
-    def calculate_deadlines(self, order: int):
-        if order == 0:
-            date = self.start_date - timezone.timedelta(days=1)
-        else:
-            upload_time = self.workers.filter(role__order=order-1).order_by('-upload_time').first().upload_time
-            date = timezone.localdate(upload_time)
+    def calculate_deadline_for_role(self, role, date):
+        worker = self.workers.get(role=role)
+        worker.deadline = date + timezone.timedelta(days=worker.days_for_work)
+        worker.save()
 
-        for worker in self.workers.filter(role__order=order).all():
-            worker.deadline = date + timezone.timedelta(days=worker.days_for_work)
-            worker.save()
+    def calculate_deadlines(self, current_role):
+        dependencies = RoleExtra.dependencies
+        continuations: RoleExtra.continuations
+        first_role = RoleExtra.first_role
+        last_role = RoleExtra.last_role
+
+        if current_role == last_role:
+            self.end()
+            return
+
+        for role in continuations[current_role]:
+            if not self.workers.filter(role__in=dependencies[role], is_done=False).exists():
+                worker = self.workers.get(role=role)
+
+                if current_role == first_role:
+                    date = self.start_date - timezone.timedelta(days=1)
+                else:
+                    date = timezone.localdate(self.workers.filter(role__in=dependencies[role])
+                                              .aggregate(models.Max('upload_time')).get('upload_time__max'))
+                worker.deadline = date + timezone.timedelta(days=worker.days_for_work)
+                worker.save()
+
+    def start(self):
+        self.calculate_deadlines(Role.CURATOR)
+        curator = self.workers.get(role=Role.CURATOR)
+        curator.is_done = True
+        curator.save()
 
     def end(self):
         self.end_date = timezone.localdate()
         self.save()
 
-        curator = self.workers.get(role__slug='curator')
-        curator.is_done = True
-        curator.save()
-
 
 class WorkerTemplate(models.Model):
     title = models.ForeignKey(Title, related_name='workers', on_delete=models.CASCADE)
     user = models.ForeignKey(User, null=True, default=None, on_delete=models.CASCADE)
-
-    role = models.ForeignKey(Role, on_delete=models.CASCADE)
-    subrole = models.ForeignKey(Subrole, null=True, default=None, on_delete=models.SET_NULL)
+    role = models.IntegerField(choices=Role.choices)
 
     rate = models.IntegerField(default=100)
     is_paid_by_pages = models.BooleanField(default=False)
@@ -194,9 +228,7 @@ class WorkerTemplate(models.Model):
 class Worker(models.Model):
     chapter = models.ForeignKey(Chapter, related_name='workers', on_delete=models.CASCADE)
     user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
-
-    role = models.ForeignKey(Role, on_delete=models.CASCADE)
-    subrole = models.ForeignKey(Subrole, null=True, on_delete=models.SET_NULL)
+    role = models.IntegerField(choices=Role.choices)
 
     rate = models.IntegerField(default=100)
     is_paid_by_pages = models.BooleanField()
@@ -213,18 +245,14 @@ class Worker(models.Model):
         self.url = url
         self.is_done = True
         self.save()
-
-        if self.role.order == Role.objects.exclude(order=None).order_by('-order').first().order:
-            self.chapter.end()
-        elif not self.chapter.workers.filter(role__order=self.role.order, is_done=False).exists():
-            self.chapter.calculate_deadlines(self.role.order + 1)
+        self.chapter.calculate_deadlines(self.role)
 
 
 class Payment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     amount = models.IntegerField()
     datetime = models.DateTimeField()
-    type = models.CharField(max_length=3)
+    type = models.IntegerField(choices=PaymentType.choices)
     worker = models.ForeignKey(Worker, null=True, default=None, on_delete=models.SET_NULL)
 
     objects = PaymentManager()
