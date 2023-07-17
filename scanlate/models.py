@@ -57,8 +57,8 @@ class UserManager(BaseUserManager):
 
 
 class TitleManager(models.Manager):
-    def create(self, name, slug):
-        title = super().create(name=name, slug=slug)
+    def create(self, name, slug, img):
+        title = super().create(name=name, slug=slug, img=img)
 
         to_create = [
             WorkerTemplate(title=title, role=role)
@@ -137,11 +137,14 @@ class User(AbstractBaseUser):
 
 class Title(models.Model):
     name = models.CharField(max_length=300)
-    slug = models.SlugField(unique=True)
+    slug = models.SlugField(unique=True, max_length=256)
 
     is_active = models.BooleanField(default=True)
     ad_date = models.DateField(null=True, default=None)
-    type = models.CharField(blank=True, default='')
+
+    raw = models.URLField(null=True)
+    discord_channel = models.URLField(null=True)
+    img = models.URLField(null=True)
 
     objects = TitleManager()
 

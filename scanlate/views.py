@@ -10,6 +10,7 @@ from .permissions import *
 from .response import ScanlateResponse
 from .filters import *
 from .models import *
+from . import parser
 
 
 # HealthCheck
@@ -51,7 +52,7 @@ class UserLoginAPIView(views.APIView):
 
         user = authenticate(username=login, password=password)
         if not user:
-            return ScanlateResponse(msg='Invalid login or password', status=status.HTTP_400_BAD_REQUEST)
+            return ScanlateResponse(msg='Неверный логин или пароль.', status=status.HTTP_400_BAD_REQUEST)
 
         response_serializer = UserLoginResponseSerializer(instance=user)
         return ScanlateResponse(content=response_serializer.data)
@@ -73,7 +74,7 @@ class UserChangePassword(views.APIView):
 
         user.set_password(password)
         user.save()
-        return ScanlateResponse(msg='Password successfully changed')
+        return ScanlateResponse(msg='Пароль успешно изменен.')
 
 
 class UserViewSet(mixins.ListModelMixin,
@@ -155,7 +156,9 @@ class TitleViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = TitleCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        title = serializer.save()
+        title = parser.create_title(serializer.validated_data.get('slug'))
+        if title is None:
+            return ScanlateResponse(msg='Не удалось создать тайтл.', status=status.HTTP_400_BAD_REQUEST)
 
         response_serializer = self.get_serializer(instance=title)
         headers = self.get_success_headers(serializer.data)
@@ -222,7 +225,7 @@ class WorkerViewSet(mixins.UpdateModelMixin,
 
         user = serializer.validated_data.get('user')
         if instance.role not in user.roles:
-            return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
+            return ScanlateResponse(msg='У пользователя нет этой роли.', status=status.HTTP_400_BAD_REQUEST)
 
         instance = serializer.save()
         response_serializer = self.get_serializer(instance=instance)
@@ -235,7 +238,7 @@ class WorkerViewSet(mixins.UpdateModelMixin,
         serializer.is_valid(raise_exception=True)
 
         worker.upload(serializer.validated_data.get('url'))
-        return ScanlateResponse(msg='Successfully uploaded')
+        return ScanlateResponse(msg='Успешно загружено.')
 
 
 class WorkerTemplateViewSet(mixins.UpdateModelMixin,
@@ -251,14 +254,14 @@ class WorkerTemplateViewSet(mixins.UpdateModelMixin,
 
         user = serializer.validated_data.get('user')
         if instance.role not in user.roles:
-            return ScanlateResponse(msg='User does not have this role', status=status.HTTP_400_BAD_REQUEST)
+            return ScanlateResponse(msg='У пользователя нет этой роли.', status=status.HTTP_400_BAD_REQUEST)
 
         instance = serializer.save()
         response_serializer = self.get_serializer(instance=instance)
         return ScanlateResponse(content=response_serializer.data)
 
 
-class UserChapters(views.APIView):
+class UserChaptersAPIView(views.APIView):
     def get(self, request):
         is_done = query_param_to_bool(request.query_params.get('is_done'))
         title_id = request.query_params.get('title_id')
@@ -269,3 +272,18 @@ class UserChapters(views.APIView):
 
         serializer = UserChaptersSerializer(queryset, many=True)
         return ScanlateResponse(content=serializer.data)
+
+
+class RolesAPIView(views.APIView):
+    permission_classes = [IsAdmin | IsCurator]
+
+    def get(self, request):
+        data = []
+        for role in sorted(Role.values):
+            data.append({
+                'role': role,
+                'users': UserNestedSerializer(User.objects.filter(roles__overlap=[role]), many=True).data
+            })
+        return ScanlateResponse(content=data)
+
+

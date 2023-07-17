@@ -85,7 +85,7 @@ class UserRetrieveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'roles', 'username', 'status']
+        fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id']
 
     def get_roles(self, obj):
         roles = []
@@ -185,15 +185,26 @@ class WorkerNestedSerializer(WorkerTemplateUpdateSerializer):
 class TitleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug']
+        fields = ['id', 'name', 'slug', 'img', 'is_active']
 
 
 class TitleRetrieveSerializer(serializers.ModelSerializer):
-    workers = WorkerTemplateNestedSerializer(many=True, read_only=True)
+    workers = serializers.SerializerMethodField()
 
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug', 'is_active', 'type', 'workers']
+        fields = ['id', 'name', 'slug', 'is_active', 'raw', 'discord_channel', 'img', 'workers']
+
+    def get_workers(self, title):
+        workers = []
+        user = self.context.get('user')
+        user_workers = title.workers.filter(user=user)
+        other_workers = title.workers.exclude(user=user)
+
+        workers.extend(WorkerTemplateNestedSerializer(instance=other_workers, many=True).data)
+        workers.extend(WorkerTemplateDetailNestedSerializer(instance=user_workers, many=True).data)
+        workers = sorted(workers, key=lambda x: x['role'])
+        return workers
 
 
 class TitleDetailRetrieveSerializer(TitleRetrieveSerializer):
@@ -201,19 +212,19 @@ class TitleDetailRetrieveSerializer(TitleRetrieveSerializer):
 
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug', 'is_active', 'type', 'ad_date', 'workers']
+        fields = ['id', 'name', 'slug', 'is_active', 'raw', 'discord_channel', 'img', 'ad_date', 'workers']
 
 
 class TitleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        fields = ['name', 'slug']
+        fields = ['slug']
 
 
 class TitleUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
-        fields = '__all__'
+        fields = ['is_active', 'discord_channel', 'raw', 'ad_date']
 
 
 class TitleUpdateResponseSerializer(serializers.ModelSerializer):
@@ -242,6 +253,12 @@ class TitleUrlCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         title = parser.create_title(validated_data.get('url'))
         return title
+
+
+class TitleNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Title
+        fields = ['id', 'name', 'slug']
 
 
 # Chapter
@@ -283,6 +300,14 @@ class ChapterUpdateResponseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ChapterNestedSerializer(serializers.ModelSerializer):
+    chapter = ScanlateFloatField()
+
+    class Meta:
+        model = Chapter
+        fields = ['id', 'tome', 'chapter']
+
+
 # User Chapters
 class WorkerUrlSerializer(serializers.ModelSerializer):
     user = UserNestedSerializer(read_only=True)
@@ -294,13 +319,18 @@ class WorkerUrlSerializer(serializers.ModelSerializer):
 
 class UserChaptersSerializer(serializers.ModelSerializer):
     urls = serializers.SerializerMethodField()
+    chapter = ChapterNestedSerializer()
+    title = serializers.SerializerMethodField()
 
     class Meta:
         model = Worker
-        fields = ['id', 'role', 'deadline', 'is_done', 'urls']
+        fields = ['id', 'role', 'deadline', 'is_done', 'urls', 'chapter', 'title']
 
     def get_urls(self, obj):
         if obj.role == RoleExtra.first_role:
             return []
         return WorkerUrlSerializer(obj.chapter.workers.filter(role__in=RoleExtra.dependencies[obj.role]),
                                    many=True).data
+
+    def get_title(self, obj):
+        return TitleNestedSerializer(obj.chapter.title).data

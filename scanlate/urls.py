@@ -19,7 +19,8 @@ urlpatterns = [
     re_path(r'auth/change-password/?$', views.UserChangePassword.as_view()),
 
     # Chapters
-    re_path(r'chapters/?$', views.UserChapters.as_view()),
+    re_path(r'chapters/?$', views.UserChaptersAPIView.as_view()),
+    re_path(r'roles/?$', views.RolesAPIView.as_view()),
 
     # Router
     path('', include(router.urls)),
