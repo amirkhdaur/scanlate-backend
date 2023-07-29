@@ -145,7 +145,7 @@ class TitleViewSet(viewsets.ModelViewSet):
         elif self.action == 'create':
             return TitleDetailRetrieveSerializer
         elif self.action == 'update':
-            return TitleUpdateResponseSerializer
+            return TitleDetailRetrieveSerializer
         return TitleListSerializer
 
     def retrieve(self, request, *args, **kwargs):
@@ -156,10 +156,7 @@ class TitleViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = TitleCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        title = parser.create_title(serializer.validated_data.get('slug'))
-        if title is None:
-            return ScanlateResponse(msg='Не удалось создать тайтл.', status=status.HTTP_400_BAD_REQUEST)
-
+        title = serializer.save()
         response_serializer = self.get_serializer(instance=title)
         headers = self.get_success_headers(serializer.data)
         return ScanlateResponse(content=response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -183,7 +180,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return ChapterRetrieveSerializer
         elif self.action == 'update':
-            return ChapterUpdateResponseSerializer
+            return ChapterRetrieveSerializer
         elif self.action == 'create':
             return ChapterRetrieveSerializer
         return ChapterListSerializer

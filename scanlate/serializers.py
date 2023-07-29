@@ -81,6 +81,7 @@ class UserListSerializer(serializers.ModelSerializer):
 
 
 class UserRetrieveSerializer(serializers.ModelSerializer):
+    discord_id = serializers.CharField()
     roles = serializers.SerializerMethodField()
 
     class Meta:
@@ -215,44 +216,105 @@ class TitleDetailRetrieveSerializer(TitleRetrieveSerializer):
         fields = ['id', 'name', 'slug', 'is_active', 'raw', 'discord_channel', 'img', 'ad_date', 'workers']
 
 
+class TitleWorkerTemplateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkerTemplate
+        fields = ['role', 'rate', 'is_paid_by_pages', 'user', 'days_for_work']
+        extra_kwargs = {
+            'rate': {'required': True},
+            'is_paid_by_pages': {'required': True},
+            'user': {'required': True},
+            'days_for_work': {'required': True}
+        }
+
+
 class TitleCreateSerializer(serializers.ModelSerializer):
+    workers = TitleWorkerTemplateUpdateSerializer(many=True)
+
     class Meta:
         model = Title
-        fields = ['slug']
+        fields = ['slug', 'is_active', 'discord_channel', 'raw', 'ad_date', 'workers']
+
+    def validate_workers(self, workers):
+        if len(workers) != len(Role.values):
+            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
+        for role in Role.values:
+            role_is_there = False
+            for worker in workers:
+                if worker.get('role') == role:
+                    role_is_there = True
+                    break
+            if not role_is_there:
+                raise serializers.ValidationError(f'Нет роли {role}.')
+        return workers
+
+    def create(self, validated_data):
+        title_slug = validated_data.pop('slug')
+        workers_data = validated_data.pop('workers')
+        title = parser.create_title(title_slug=title_slug, **validated_data)
+        if title is None:
+            raise serializers.ValidationError({'detail': 'Не удалось создать тайтл.'})
+
+        to_create = [
+            WorkerTemplate(title=title,
+                           role=worker_data.get('role'),
+                           rate=worker_data.get('rate'),
+                           is_paid_by_pages=worker_data.get('is_paid_by_pages'),
+                           user=worker_data.get('user'),
+                           days_for_work=worker_data.get('days_for_work'))
+            for worker_data in workers_data
+        ]
+        WorkerTemplate.objects.bulk_create(to_create)
+        return title
 
 
 class TitleUpdateSerializer(serializers.ModelSerializer):
+    workers = TitleWorkerTemplateUpdateSerializer(many=True)
+
     class Meta:
         model = Title
-        fields = ['is_active', 'discord_channel', 'raw', 'ad_date']
+        fields = ['is_active', 'discord_channel', 'raw', 'ad_date', 'workers']
+
+    def validate_workers(self, workers):
+        if len(workers) != len(Role.values):
+            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
+        for role in Role.values:
+            role_is_there = False
+            for worker in workers:
+                if worker.get('role') == role:
+                    role_is_there = True
+                    break
+            if not role_is_there:
+                raise serializers.ValidationError(f'Нет роли {role}.')
+        return workers
+
+    def update(self, instance, validated_data):
+        workers_data = validated_data.pop('workers')
+        workers = instance.workers.all()
+        for worker in workers:
+            worker_data = {}
+            for el in workers_data:
+                if el.get('role') == worker.role:
+                    worker_data = el
+                    break
+            worker.rate = worker_data.get('rate')
+            worker.is_paid_by_pages = worker_data.get('is_paid_by_pages')
+            worker.user = worker_data.get('user')
+            worker.days_for_work = worker_data.get('days_for_work')
+        WorkerTemplate.objects.bulk_update(workers, ['rate', 'is_paid_by_pages', 'user', 'days_for_work'])
+
+        instance.is_active = validated_data.get('is_active')
+        instance.ad_date = validated_data.get('ad_date')
+        instance.discord_channel = validated_data.get('discord_channel')
+        instance.raw = validated_data.get('raw')
+        instance.save()
+        return instance
 
 
 class TitleUpdateResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
         fields = '__all__'
-
-
-class TitleUrlCreateSerializer(serializers.Serializer):
-    url = serializers.URLField(required=True)
-
-    def validate_url(self, value):
-        parsed_url = urlparse(value)
-        if parsed_url.scheme != 'https':
-            raise serializers.ValidationError('scheme is not https')
-        elif parsed_url.hostname != 'remanga.org':
-            raise serializers.ValidationError('hostname is not remanga.org')
-        elif parsed_url.path:
-            path_elements = parsed_url.path.split('/')
-            print(parsed_url.path)
-            print(path_elements)
-            if len(path_elements) != 3 or path_elements[1] != 'manga':
-                raise serializers.ValidationError('url does not lead to the title')
-        return value
-
-    def create(self, validated_data):
-        title = parser.create_title(validated_data.get('url'))
-        return title
 
 
 class TitleNestedSerializer(serializers.ModelSerializer):
@@ -279,6 +341,18 @@ class ChapterListSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ChapterWorkerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Worker
+        fields = ['role', 'rate', 'is_paid_by_pages', 'user', 'days_for_work']
+        extra_kwargs = {
+            'rate': {'required': True},
+            'is_paid_by_pages': {'required': True},
+            'user': {'required': True},
+            'days_for_work': {'required': True}
+        }
+
+
 class ChapterCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chapter
@@ -287,9 +361,45 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
 
 
 class ChapterUpdateSerializer(serializers.ModelSerializer):
+    workers = ChapterWorkerSerializer(many=True)
+
     class Meta:
         model = Chapter
-        fields = ['tome', 'chapter', 'pages']
+        fields = ['tome', 'chapter', 'pages', 'workers']
+
+    def validate_workers(self, workers):
+        if len(workers) != len(Role.values):
+            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
+        for role in Role.values:
+            role_is_there = False
+            for worker in workers:
+                if worker.get('role') == role:
+                    role_is_there = True
+                    break
+            if not role_is_there:
+                raise serializers.ValidationError(f'Нет роли {role}.')
+        return workers
+
+    def update(self, instance, validated_data):
+        workers_data = validated_data.pop('workers')
+        workers = instance.workers.all()
+        for worker in workers:
+            worker_data = {}
+            for el in workers_data:
+                if el.get('role') == worker.role:
+                    worker_data = el
+                    break
+            worker.rate = worker_data.get('rate')
+            worker.is_paid_by_pages = worker_data.get('is_paid_by_pages')
+            worker.user = worker_data.get('user')
+            worker.days_for_work = worker_data.get('days_for_work')
+        Worker.objects.bulk_update(workers, ['rate', 'is_paid_by_pages', 'user', 'days_for_work'])
+
+        instance.tome = validated_data.get('tome')
+        instance.chapter = validated_data.get('chapter')
+        instance.pages = validated_data.get('pages')
+        instance.save()
+        return instance
 
 
 class ChapterUpdateResponseSerializer(serializers.ModelSerializer):

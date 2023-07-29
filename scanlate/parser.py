@@ -18,14 +18,14 @@ def get_content(url):
     return content
 
 
-def create_title(title_slug):
+def create_title(title_slug, **kwargs):
     url = f'https://api.remanga.org/api/titles/{title_slug}/'
     content = get_content(url)
     if content is None:
         return content
     img = 'https://remanga.org' + content.get('img').get('high')
     name = content.get('rus_name')
-    return Title.objects.create(name=name, slug=title_slug, img=img)
+    return Title.objects.create(name=name, slug=title_slug, img=img, **kwargs)
 
 
 def check_chapters(title_slug):

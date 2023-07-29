@@ -57,14 +57,8 @@ class UserManager(BaseUserManager):
 
 
 class TitleManager(models.Manager):
-    def create(self, name, slug, img):
-        title = super().create(name=name, slug=slug, img=img)
-
-        to_create = [
-            WorkerTemplate(title=title, role=role)
-            for role in Role.values
-        ]
-        WorkerTemplate.objects.bulk_create(to_create)
+    def create(self, name, slug, img, **kwargs):
+        title = super().create(name=name, slug=slug, img=img, **kwargs)
         return title
 
 
