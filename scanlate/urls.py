@@ -6,7 +6,6 @@ from .routers import ScanlateRouter
 router = ScanlateRouter()
 router.register(r'titles/chapters/workers', views.WorkerViewSet)
 router.register(r'titles/chapters', views.ChapterViewSet)
-router.register(r'titles/workers', views.WorkerTemplateViewSet)
 router.register(r'titles', views.TitleViewSet)
 router.register(r'users', views.UserViewSet)
 

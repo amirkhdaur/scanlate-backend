@@ -21,11 +21,6 @@ class Role(models.IntegerChoices):
     QUALITY_CHECKER = 5
 
 
-class PaymentType(models.IntegerChoices):
-    IN = 0
-    OUT = 1
-
-
 class RoleExtra:
     dependencies = {
         Role.CURATOR: [],
@@ -45,6 +40,18 @@ class RoleExtra:
     }
     first_role = Role.RAW_PROVIDER
     last_role = Role.QUALITY_CHECKER
+
+
+class PaymentType(models.IntegerChoices):
+    IN = 0
+    OUT = 1
+
+
+class ReleaseFrequency(models.IntegerChoices):
+    DAILY = 0
+    WEEKLY = 1
+    BIWEEKLY = 2
+    MONTHLY = 3
 
 
 class UserManager(BaseUserManager):
@@ -119,6 +126,7 @@ class User(AbstractBaseUser):
     discord_id = models.PositiveBigIntegerField(null=True)
     vk_id = models.PositiveBigIntegerField(null=True)
     status = models.IntegerField(null=True, choices=Status.choices)
+    telegram = models.URLField(null=True)
 
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = []
@@ -131,7 +139,8 @@ class User(AbstractBaseUser):
 
 class Title(models.Model):
     name = models.CharField(max_length=300)
-    slug = models.SlugField(unique=True, max_length=256)
+    raw_name = models.CharField(max_length=300, null=True)
+    slug = models.SlugField(unique=True, max_length=300)
 
     is_active = models.BooleanField(default=True)
     ad_date = models.DateField(null=True, default=None)
@@ -139,6 +148,8 @@ class Title(models.Model):
     raw = models.URLField(null=True)
     discord_channel = models.URLField(null=True)
     img = models.URLField(null=True)
+
+    release_frequency = models.IntegerField(choices=ReleaseFrequency.choices)
 
     objects = TitleManager()
 

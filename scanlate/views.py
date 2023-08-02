@@ -1,6 +1,6 @@
 from rest_framework import viewsets, status, exceptions, views, mixins, generics
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions as django_exceptions
@@ -10,7 +10,6 @@ from .permissions import *
 from .response import ScanlateResponse
 from .filters import *
 from .models import *
-from . import parser
 
 
 # HealthCheck
@@ -86,7 +85,7 @@ class UserViewSet(mixins.ListModelMixin,
     filter_backends = [UserFilterBackend]
 
     def get_permissions(self):
-        permission_classes = []
+        permission_classes = [IsAuthenticated]
         if self.action == 'update':
             permission_classes = [IsCurator | IsAdmin]
         elif self.action == 'destroy':
@@ -110,7 +109,7 @@ class UserViewSet(mixins.ListModelMixin,
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = UserUpdateSerializer(instance, data=request.data)
+        serializer = UserUpdateSerializer(instance, data=request.data, context={'user': request.user})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
@@ -119,11 +118,12 @@ class UserViewSet(mixins.ListModelMixin,
 
     @action(detail=False, methods=['get'])
     def current(self, request):
+        self.check_permissions(request)
         serializer = UserCurrentSerializer(instance=request.user)
         return ScanlateResponse(content=serializer.data)
 
     @action(detail=False, methods=['put'])
-    def status(self, request, *args, **kwargs):
+    def status(self, request):
         serializer = UserStatusSerializer(instance=request.user, data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -209,24 +209,9 @@ class ChapterViewSet(viewsets.ModelViewSet):
         return ScanlateResponse(content=response_serializer.data)
 
 
-class WorkerViewSet(mixins.UpdateModelMixin,
-                    viewsets.GenericViewSet):
+class WorkerViewSet(viewsets.GenericViewSet):
     queryset = Worker.objects.all()
     permission_classes = [IsAdmin | IsCurator]
-    serializer_class = WorkerUpdateResponseSerializer
-
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = WorkerUpdateSerializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        user = serializer.validated_data.get('user')
-        if instance.role not in user.roles:
-            return ScanlateResponse(msg='У пользователя нет этой роли.', status=status.HTTP_400_BAD_REQUEST)
-
-        instance = serializer.save()
-        response_serializer = self.get_serializer(instance=instance)
-        return ScanlateResponse(content=response_serializer.data)
 
     @action(detail=True, methods=['post'], permission_classes=[IsWorker])
     def upload(self, request, *args, **kwargs):
@@ -236,26 +221,6 @@ class WorkerViewSet(mixins.UpdateModelMixin,
 
         worker.upload(serializer.validated_data.get('url'))
         return ScanlateResponse(msg='Успешно загружено.')
-
-
-class WorkerTemplateViewSet(mixins.UpdateModelMixin,
-                            viewsets.GenericViewSet):
-    queryset = WorkerTemplate.objects.all()
-    serializer_class = WorkerTemplateSerializer
-    permission_classes = [IsAdmin | IsCurator]
-
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = WorkerTemplateUpdateSerializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        user = serializer.validated_data.get('user')
-        if instance.role not in user.roles:
-            return ScanlateResponse(msg='У пользователя нет этой роли.', status=status.HTTP_400_BAD_REQUEST)
-
-        instance = serializer.save()
-        response_serializer = self.get_serializer(instance=instance)
-        return ScanlateResponse(content=response_serializer.data)
 
 
 class UserChaptersAPIView(views.APIView):

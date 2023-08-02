@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
-from urllib.parse import urlparse
 
 from . import parser
 from .models import *
@@ -38,7 +37,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return User.objects.create(
-            username=validated_data.get('username'),
+            username=validated_data.get('username').lower(),
             password=validated_data.get('password'),
             roles=validated_data.get('roles')
         )
@@ -86,7 +85,7 @@ class UserRetrieveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id']
+        fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id', 'telegram']
 
     def get_roles(self, obj):
         roles = []
@@ -106,7 +105,7 @@ class UserDetailRetrieveSerializer(UserRetrieveSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id', 'balance']
+        fields = ['id', 'roles', 'username', 'status', 'discord_id', 'vk_id', 'telegram', 'balance']
 
 
 class UserNestedSerializer(serializers.ModelSerializer):
@@ -118,7 +117,16 @@ class UserNestedSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['roles', 'discord_id', 'vk_id']
+        fields = ['roles', 'discord_id', 'vk_id', 'telegram']
+
+    def validate_roles(self, roles):
+        current_user = self.context.get('user')
+        user = self.instance
+        if Role.CURATOR in roles and not current_user.is_admin:
+            raise serializers.ValidationError('Куратор не может выдавать роль куратора.')
+        if Role.CURATOR in user.roles and not current_user.is_admin:
+            raise serializers.ValidationError('Куратор не может менять роли у куратора.')
+        return roles
 
 
 class UserStatusSerializer(serializers.ModelSerializer):
@@ -129,14 +137,6 @@ class UserStatusSerializer(serializers.ModelSerializer):
 
 
 # Worker Template
-class WorkerTemplateSerializer(serializers.ModelSerializer):
-    user = UserNestedSerializer(read_only=True)
-
-    class Meta:
-        model = WorkerTemplate
-        exclude = ['title']
-
-
 class WorkerTemplateNestedSerializer(serializers.ModelSerializer):
     user = UserNestedSerializer(read_only=True)
 
@@ -153,20 +153,7 @@ class WorkerTemplateDetailNestedSerializer(serializers.ModelSerializer):
         exclude = ['title']
 
 
-class WorkerTemplateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = WorkerTemplate
-        exclude = ['title', 'role']
-
-
-# Worker
-class WorkerUpdateSerializer(WorkerTemplateUpdateSerializer):
-    class Meta:
-        model = Worker
-        fields = ['rate', 'is_paid_by_pages', 'days_for_work', 'user']
-
-
-class WorkerUpdateResponseSerializer(WorkerTemplateUpdateSerializer):
+class WorkerNestedSerializer(serializers.ModelSerializer):
     user = UserNestedSerializer(read_only=True)
 
     class Meta:
@@ -174,12 +161,29 @@ class WorkerUpdateResponseSerializer(WorkerTemplateUpdateSerializer):
         exclude = ['chapter']
 
 
-class WorkerNestedSerializer(WorkerTemplateUpdateSerializer):
-    user = UserNestedSerializer(read_only=True)
+class WorkerValidationMixin:
+    def validate(self, data):
+        user = data.get('user')
+        role = data.get('role')
 
-    class Meta:
-        model = Worker
-        exclude = ['chapter']
+        if user and role not in user.roles:
+            raise serializers.ValidationError({'role': f'У пользователя {user.username} нет роли {role}.'})
+        return data
+
+
+class WorkerRolesValidationMixin:
+    def validate_workers(self, workers):
+        if len(workers) != len(Role.values):
+            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
+        for role in Role.values:
+            role_is_there = False
+            for worker in workers:
+                if worker.get('role') == role:
+                    role_is_there = True
+                    break
+            if not role_is_there:
+                raise serializers.ValidationError(f'Нет роли {role}.')
+        return workers
 
 
 # Title Serializers
@@ -194,7 +198,8 @@ class TitleRetrieveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug', 'is_active', 'raw', 'discord_channel', 'img', 'workers']
+        fields = ['id', 'name', 'raw_name', 'slug', 'is_active', 'raw',
+                  'discord_channel', 'img', 'release_frequency', 'workers']
 
     def get_workers(self, title):
         workers = []
@@ -213,10 +218,10 @@ class TitleDetailRetrieveSerializer(TitleRetrieveSerializer):
 
     class Meta:
         model = Title
-        fields = ['id', 'name', 'slug', 'is_active', 'raw', 'discord_channel', 'img', 'ad_date', 'workers']
+        fields = '__all__'
 
 
-class TitleWorkerTemplateUpdateSerializer(serializers.ModelSerializer):
+class TitleWorkerTemplateUpdateSerializer(serializers.ModelSerializer, WorkerValidationMixin):
     class Meta:
         model = WorkerTemplate
         fields = ['role', 'rate', 'is_paid_by_pages', 'user', 'days_for_work']
@@ -228,25 +233,12 @@ class TitleWorkerTemplateUpdateSerializer(serializers.ModelSerializer):
         }
 
 
-class TitleCreateSerializer(serializers.ModelSerializer):
+class TitleCreateSerializer(serializers.ModelSerializer, WorkerRolesValidationMixin):
     workers = TitleWorkerTemplateUpdateSerializer(many=True)
 
     class Meta:
         model = Title
-        fields = ['slug', 'is_active', 'discord_channel', 'raw', 'ad_date', 'workers']
-
-    def validate_workers(self, workers):
-        if len(workers) != len(Role.values):
-            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
-        for role in Role.values:
-            role_is_there = False
-            for worker in workers:
-                if worker.get('role') == role:
-                    role_is_there = True
-                    break
-            if not role_is_there:
-                raise serializers.ValidationError(f'Нет роли {role}.')
-        return workers
+        fields = ['slug', 'raw_name', 'is_active', 'discord_channel', 'raw', 'ad_date', 'workers', 'release_frequency']
 
     def create(self, validated_data):
         title_slug = validated_data.pop('slug')
@@ -268,25 +260,12 @@ class TitleCreateSerializer(serializers.ModelSerializer):
         return title
 
 
-class TitleUpdateSerializer(serializers.ModelSerializer):
+class TitleUpdateSerializer(serializers.ModelSerializer, WorkerRolesValidationMixin):
     workers = TitleWorkerTemplateUpdateSerializer(many=True)
 
     class Meta:
         model = Title
-        fields = ['is_active', 'discord_channel', 'raw', 'ad_date', 'workers']
-
-    def validate_workers(self, workers):
-        if len(workers) != len(Role.values):
-            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
-        for role in Role.values:
-            role_is_there = False
-            for worker in workers:
-                if worker.get('role') == role:
-                    role_is_there = True
-                    break
-            if not role_is_there:
-                raise serializers.ValidationError(f'Нет роли {role}.')
-        return workers
+        fields = ['raw_name', 'is_active', 'discord_channel', 'raw', 'ad_date', 'workers', 'release_frequency']
 
     def update(self, instance, validated_data):
         workers_data = validated_data.pop('workers')
@@ -303,12 +282,7 @@ class TitleUpdateSerializer(serializers.ModelSerializer):
             worker.days_for_work = worker_data.get('days_for_work')
         WorkerTemplate.objects.bulk_update(workers, ['rate', 'is_paid_by_pages', 'user', 'days_for_work'])
 
-        instance.is_active = validated_data.get('is_active')
-        instance.ad_date = validated_data.get('ad_date')
-        instance.discord_channel = validated_data.get('discord_channel')
-        instance.raw = validated_data.get('raw')
-        instance.save()
-        return instance
+        return super().update(instance, validated_data)
 
 
 class TitleUpdateResponseSerializer(serializers.ModelSerializer):
@@ -341,7 +315,7 @@ class ChapterListSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class ChapterWorkerSerializer(serializers.ModelSerializer):
+class ChapterWorkerSerializer(serializers.ModelSerializer, WorkerValidationMixin):
     class Meta:
         model = Worker
         fields = ['role', 'rate', 'is_paid_by_pages', 'user', 'days_for_work']
@@ -360,25 +334,12 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
         extra_kwargs = {'start_date': {'required': False}}
 
 
-class ChapterUpdateSerializer(serializers.ModelSerializer):
+class ChapterUpdateSerializer(serializers.ModelSerializer, WorkerRolesValidationMixin):
     workers = ChapterWorkerSerializer(many=True)
 
     class Meta:
         model = Chapter
         fields = ['tome', 'chapter', 'pages', 'workers']
-
-    def validate_workers(self, workers):
-        if len(workers) != len(Role.values):
-            raise serializers.ValidationError('Здесь меньше или больше необходимых ролей.')
-        for role in Role.values:
-            role_is_there = False
-            for worker in workers:
-                if worker.get('role') == role:
-                    role_is_there = True
-                    break
-            if not role_is_there:
-                raise serializers.ValidationError(f'Нет роли {role}.')
-        return workers
 
     def update(self, instance, validated_data):
         workers_data = validated_data.pop('workers')
