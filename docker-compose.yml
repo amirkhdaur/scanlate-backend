@@ -50,14 +50,14 @@ services:
       - main
 
   nginx:
-    build: nginx/
+    image: nginx
     environment:
       SERVER_HOST: backend
       SERVER_PORT: 8000
       NGINX_HOST: ${DOMAIN}
     volumes:
-      - certbot-conf:/etc/letsencrypt
-      - certbot-www:/var/www/certbot
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
     restart: unless-stopped
     networks:
       - main
@@ -68,20 +68,8 @@ services:
       backend:
         condition: service_healthy
 
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - certbot-conf:/etc/letsencrypt
-      - certbot-www:/var/www/certbot
-    command: certonly --webroot -w /var/www/certbot --force-renewal --email amirkhdaur@gmail.com -d ${DOMAIN} --agree-tos
-    depends_on:
-      nginx:
-        condition: service_started
-
 volumes:
   pgdata:
-  certbot-conf:
-  certbot-www:
 
 networks:
   main:

@@ -1,0 +1,22 @@
+services:
+  nginx:
+    image: nginx
+    environment:
+      NGINX_HOST: ${DOMAIN}
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+      - ./nginx/templates/certbot.conf.template:/etc/nginx/templates/default.conf.template
+    ports:
+      - 80:80
+      - 443:443
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    command: certonly --webroot -w /var/www/certbot --force-renewal --email ${EMAIL} -d ${DOMAIN} --agree-tos
+    depends_on:
+      nginx:
+        condition: service_started
